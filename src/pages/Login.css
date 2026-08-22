@@ -1,0 +1,248 @@
+/* Login.css - styles for Login.jsx */
+ 
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f2f4f6;
+  padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+ 
+.login-wrap {
+  display: flex;
+  gap: 32px;
+  align-items: stretch;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+ 
+/* ---------- Login card ---------- */
+ 
+.login-card {
+  width: 320px;
+  background: #ffffff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(20, 25, 40, 0.08);
+  display: flex;
+  flex-direction: column;
+}
+ 
+.login-card__header {
+  background: #1b2436;
+  padding: 30px 24px;
+  text-align: center;
+}
+ 
+.login-card__header h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 800;
+  color: #ff8a1e;
+  letter-spacing: 0.5px;
+}
+ 
+.login-card__body {
+  padding: 28px 24px 30px;
+  display: flex;
+  flex-direction: column;
+}
+ 
+/* ---------- Inputs ---------- */
+ 
+.input-group {
+  position: relative;
+  margin-bottom: 6px;
+}
+ 
+.input-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #1b2436;
+  display: flex;
+}
+ 
+.input-group input {
+  width: 100%;
+  padding: 13px 14px 13px 44px;
+  border: 1px solid #e2e5ea;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #1b2436;
+  background: #ffffff;
+  outline: none;
+  transition: border-color 0.15s ease;
+  box-sizing: border-box;
+}
+ 
+.input-group input::placeholder {
+  color: #a7adba;
+}
+ 
+.input-group input:focus {
+  border-color: #ff8a1e;
+}
+ 
+.input-group input:focus-visible {
+  outline: 2px solid #ff8a1e;
+  outline-offset: 1px;
+}
+ 
+.field-error {
+  color: #e5484d;
+  font-size: 12px;
+  min-height: 16px;
+  margin: 2px 2px 10px;
+}
+ 
+/* ---------- Links ---------- */
+ 
+.forgot-link {
+  align-self: flex-start;
+  font-size: 13px;
+  color: #1b2436;
+  text-decoration: none;
+  margin: 4px 0 18px;
+}
+ 
+.forgot-link:hover {
+  text-decoration: underline;
+}
+ 
+.create-account {
+  text-align: center;
+  color: #1b2436;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+ 
+.create-account:hover {
+  text-decoration: underline;
+}
+ 
+/* ---------- Button ---------- */
+ 
+.login-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #1b2436;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 13px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+ 
+.login-btn:hover {
+  background: #17202f;
+}
+ 
+.login-btn:focus-visible {
+  outline: 2px solid #ff8a1e;
+  outline-offset: 2px;
+}
+ 
+.login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+ 
+/* ---------- Status message ---------- */
+ 
+.status {
+  text-align: center;
+  font-size: 13px;
+  min-height: 18px;
+  margin-top: 10px;
+}
+ 
+.status.success {
+  color: #2fa360;
+}
+ 
+.status.error {
+  color: #e5484d;
+}
+ 
+/* ---------- Divider ---------- */
+ 
+.divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: #8a92a3;
+  font-size: 13px;
+  margin: 18px 0 14px;
+}
+ 
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #e2e5ea;
+}
+ 
+.divider span {
+  padding: 0 12px;
+}
+ 
+/* ---------- Brand panel ---------- */
+ 
+.brand-panel {
+  width: 320px;
+  background: linear-gradient(160deg, #2a3247 0%, #232b3d 60%, #1b2233 100%);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  box-shadow: 0 10px 30px rgba(20, 25, 40, 0.08);
+}
+ 
+.brand-panel__logo {
+  width: 140px;
+  height: 140px;
+  margin-bottom: 20px;
+}
+ 
+.brand-panel__title {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 800;
+  color: #ff8a1e;
+  letter-spacing: 1px;
+}
+ 
+.brand-panel__subtitle {
+  margin: 4px 0 0;
+  font-size: 22px;
+  color: #ffffff;
+  font-weight: 400;
+}
+ 
+/* ---------- Responsive ---------- */
+ 
+@media (max-width: 700px) {
+  .login-wrap {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+ 
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
