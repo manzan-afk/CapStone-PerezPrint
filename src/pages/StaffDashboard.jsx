@@ -1,8 +1,48 @@
 import { useState } from "react";
-import "./AdminDashboard.css";
+import "./StaffDashboard.css";
 
-export default function AdminDashboard() {
+export default function StaffDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const navItems = [
+    {
+      label: "Dashboard",
+      active: true,
+      icon: (
+        <path
+          fill="currentColor"
+          d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6V11h-6v9Zm0-16v5h6V4h-6Z"
+        />
+      ),
+    },
+    {
+      label: "Orders",
+      icon: (
+        <path
+          fill="currentColor"
+          d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6Zm0 2h12l1.5 2h-15L6 4Zm-1 4h14v12H5V8Zm3 2v2h8v-2H8Z"
+        />
+      ),
+    },
+    {
+      label: "Pickup Schedule",
+      icon: (
+        <path
+          fill="currentColor"
+          d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7Zm-2 8h14v10H5V10Z"
+        />
+      ),
+    },
+    {
+      label: "Notifications",
+      icon: (
+        <path
+          fill="currentColor"
+          d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2Zm6-6v-5a6 6 0 0 0-4-5.65V4a2 2 0 0 0-4 0v1.35A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2Z"
+        />
+      ),
+    },
+  ];
 
   return (
     <div className="dashboard-layout">
@@ -34,15 +74,18 @@ export default function AdminDashboard() {
         </div>
 
         <nav className="sidebar__nav">
-          <a href="#" className="nav-item nav-item--active">
-            <svg viewBox="0 0 24 24" width="20" height="20">
-              <path
-                fill="currentColor"
-                d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6V11h-6v9Zm0-16v5h6V4h-6Z"
-              />
-            </svg>
-            Dashboard
-          </a>
+          {navItems.map((item) => (
+            <a
+              key={item.label}
+              href="#"
+              className={`nav-item ${item.active ? "nav-item--active" : ""}`}
+            >
+              <svg viewBox="0 0 24 24" width="20" height="20">
+                {item.icon}
+              </svg>
+              {item.label}
+            </a>
+          ))}
         </nav>
 
         <div className="sidebar__footer">
@@ -57,7 +100,7 @@ export default function AdminDashboard() {
             </div>
             <div className="user-text">
               <span className="user-name">Name</span>
-              <span className="user-role">Admin</span>
+              <span className="user-role">Staff</span>
             </div>
           </div>
 
