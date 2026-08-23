@@ -1,24 +1,36 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { loginUser, signupUser, resetPassword, friendlyAuthError } from "../services/authService";
 import "./Login.css";
- import { loginUser, signupUser, resetPassword, friendlyAuthError } from "../services/authService"; 
  
 export default function Login() {
-  const [mode, setMode] = useState("login"); // "login" | "signup"
+  const navigate = useNavigate();
+ 
+  // Which form is showing: "login" or "signup"
+  const [mode, setMode] = useState("login");
+ 
+  // Field values
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+ 
+  // Validation error messages, shown under each field
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+ 
+  // Success/error banner shown after submit
   const [status, setStatus] = useState({ text: "", type: "" });
+ 
+  // Disables the button + swaps its label while submitting
   const [loading, setLoading] = useState(false);
  
   function toggleMode() {
-    setMode((m) => (m === "login" ? "signup" : "login"));
+    setMode((prev) => (prev === "login" ? "signup" : "login"));
     setStatus({ text: "", type: "" });
     setEmailError("");
     setPasswordError("");
   }
  
-  function handleForgotPassword(e) {
+  async function handleForgotPassword(e) {
     e.preventDefault();
     setStatus({ text: "", type: "" });
  
@@ -28,11 +40,15 @@ export default function Login() {
     }
     setEmailError("");
  
-    // TODO: hook up password reset once a backend is connected.
-    setStatus({ text: "Password reset is not connected yet.", type: "error" });
+    try {
+      await resetPassword(email.trim());
+      setStatus({ text: "Password reset email sent.", type: "success" });
+    } catch (err) {
+      setStatus({ text: friendlyAuthError(err.code), type: "error" });
+    }
   }
  
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setEmailError("");
     setPasswordError("");
@@ -59,19 +75,23 @@ export default function Login() {
  
     if (!valid) return;
  
-    // TODO: replace this simulated request with a real auth call
-    // (Firebase or otherwise) once the backend is connected.
     setLoading(true);
-    setTimeout(() => {
+    try {
+      if (mode === "login") {
+        await loginUser(trimmedEmail, password);
+        setStatus({ text: "Logged in successfully.", type: "success" });
+      } else {
+        await signupUser(trimmedEmail, password);
+        setStatus({ text: "Account created.", type: "success" });
+      }
+ 
+      // Redirect to the dashboard after a successful login/signup.
+      navigate("/dashboard");
+    } catch (err) {
+      setStatus({ text: friendlyAuthError(err.code), type: "error" });
+    } finally {
       setLoading(false);
-      setStatus({
-        text:
-          mode === "login"
-            ? "Form is valid — not connected to a backend yet."
-            : "Form is valid — sign-up not connected to a backend yet.",
-        type: "success",
-      });
-    }, 600);
+    }
   }
  
   return (
@@ -175,3 +195,4 @@ export default function Login() {
     </div>
   );
 }
+ 
