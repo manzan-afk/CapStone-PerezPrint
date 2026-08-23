@@ -1,74 +1,46 @@
 // authService.jsx
-// Simple auth service layer — keeps Login.jsx from talking to a backend
-// directly. Right now everything here is SIMULATED (no real requests),
-// so this file is the only place you'll need to touch once Firebase
-// (or any other backend) is ready to be connected.
- 
-const FAKE_DELAY_MS = 600;
- 
+// Auth service layer — connects to Firebase Authentication.
+// Login.jsx (and any other component) calls these functions instead of
+// talking to Firebase directly.
+
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+} from "firebase/auth";
+import { auth } from "../firebase-config";
+
 /**
- * Attempts to log a user in.
+ * Logs a user in with Firebase Authentication.
  * @param {string} email
  * @param {string} password
- * @returns {Promise<{ email: string }>} resolves with the "logged in" user
+ * @returns {Promise<import("firebase/auth").UserCredential>}
  */
 export function loginUser(email, password) {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      // TODO: replace with real Firebase call, e.g.
-      // signInWithEmailAndPassword(auth, email, password)
-      if (!email || !password) {
-        reject({ code: "auth/invalid-credential" });
-        return;
-      }
-      resolve({ email });
-    }, FAKE_DELAY_MS);
-  });
+  return signInWithEmailAndPassword(auth, email, password);
 }
- 
+
 /**
- * Attempts to create a new account.
+ * Creates a new account with Firebase Authentication.
  * @param {string} email
  * @param {string} password
- * @returns {Promise<{ email: string }>} resolves with the "created" user
+ * @returns {Promise<import("firebase/auth").UserCredential>}
  */
 export function signupUser(email, password) {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      // TODO: replace with real Firebase call, e.g.
-      // createUserWithEmailAndPassword(auth, email, password)
-      if (!email || !password) {
-        reject({ code: "auth/invalid-credential" });
-        return;
-      }
-      resolve({ email });
-    }, FAKE_DELAY_MS);
-  });
+  return createUserWithEmailAndPassword(auth, email, password);
 }
- 
+
 /**
- * Sends a password reset email.
+ * Sends a password reset email via Firebase Authentication.
  * @param {string} email
  * @returns {Promise<void>}
  */
 export function resetPassword(email) {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      // TODO: replace with real Firebase call, e.g.
-      // sendPasswordResetEmail(auth, email)
-      if (!email) {
-        reject({ code: "auth/invalid-email" });
-        return;
-      }
-      resolve();
-    }, FAKE_DELAY_MS);
-  });
+  return sendPasswordResetEmail(auth, email);
 }
- 
+
 /**
- * Maps an error's code to a user-friendly message.
- * Works with both simulated errors above and real Firebase error codes,
- * so Login.jsx doesn't need to change when the backend is connected.
+ * Maps a Firebase Auth error code to a user-friendly message.
  * @param {string} code
  * @returns {string}
  */

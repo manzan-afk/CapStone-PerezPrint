@@ -1,16 +1,26 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import { auth } from "../firebase-config";
+import { getUserProfile } from "../services/userServices";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+
+      if (currentUser) {
+        const profile = await getUserProfile(currentUser.uid);
+        setRole(profile?.role ?? "customer");
+      } else {
+        setRole(null);
+      }
+
       setLoading(false);
     });
 
@@ -23,6 +33,7 @@ export function AuthProvider({ children }) {
 
   const value = {
     user,
+    role,
     loading,
     logout,
   };

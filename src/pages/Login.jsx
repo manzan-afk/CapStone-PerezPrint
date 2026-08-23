@@ -1,45 +1,53 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginUser, signupUser, resetPassword, friendlyAuthError } from "../services/authService";
+import { createUserProfile, getUserProfile } from "../services/userServices";
 import "./Login.css";
- 
+
+// Sends the user to the right dashboard based on their role.
+function getRedirectPath(role) {
+  if (role === "admin") return "/admin";
+  if (role === "staff") return "/staff";
+  return "/dashboard"; // default: customer
+}
+
 export default function Login() {
   const navigate = useNavigate();
- 
+
   // Which form is showing: "login" or "signup"
   const [mode, setMode] = useState("login");
- 
+
   // Field values
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
- 
+
   // Validation error messages, shown under each field
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
- 
+
   // Success/error banner shown after submit
   const [status, setStatus] = useState({ text: "", type: "" });
- 
+
   // Disables the button + swaps its label while submitting
   const [loading, setLoading] = useState(false);
- 
+
   function toggleMode() {
     setMode((prev) => (prev === "login" ? "signup" : "login"));
     setStatus({ text: "", type: "" });
     setEmailError("");
     setPasswordError("");
   }
- 
+
   async function handleForgotPassword(e) {
     e.preventDefault();
     setStatus({ text: "", type: "" });
- 
+
     if (!email.trim()) {
       setEmailError("Enter your email above first.");
       return;
     }
     setEmailError("");
- 
+
     try {
       await resetPassword(email.trim());
       setStatus({ text: "Password reset email sent.", type: "success" });
@@ -47,16 +55,16 @@ export default function Login() {
       setStatus({ text: friendlyAuthError(err.code), type: "error" });
     }
   }
- 
+
   async function handleSubmit(e) {
     e.preventDefault();
     setEmailError("");
     setPasswordError("");
     setStatus({ text: "", type: "" });
- 
+
     let valid = true;
     const trimmedEmail = email.trim();
- 
+
     if (!trimmedEmail) {
       setEmailError("Email is required.");
       valid = false;
@@ -64,7 +72,7 @@ export default function Login() {
       setEmailError("Enter a valid email address.");
       valid = false;
     }
- 
+
     if (!password) {
       setPasswordError("Password is required.");
       valid = false;
@@ -72,28 +80,37 @@ export default function Login() {
       setPasswordError("Password must be at least 6 characters.");
       valid = false;
     }
- 
+
     if (!valid) return;
- 
+
     setLoading(true);
     try {
       if (mode === "login") {
-        await loginUser(trimmedEmail, password);
+        const userCredential = await loginUser(trimmedEmail, password);
+        const profile = await getUserProfile(userCredential.user.uid);
+
         setStatus({ text: "Logged in successfully.", type: "success" });
+        navigate(getRedirectPath(profile?.role));
       } else {
-        await signupUser(trimmedEmail, password);
+        const userCredential = await signupUser(trimmedEmail, password);
+
+        // New accounts default to "customer" — an admin can upgrade
+        // someone's role later directly in Firestore.
+        await createUserProfile(userCredential.user.uid, {
+          email: trimmedEmail,
+          role: "customer",
+        });
+
         setStatus({ text: "Account created.", type: "success" });
+        navigate("/dashboard");
       }
- 
-      // Redirect to the dashboard after a successful login/signup.
-      navigate("/dashboard");
     } catch (err) {
       setStatus({ text: friendlyAuthError(err.code), type: "error" });
     } finally {
       setLoading(false);
     }
   }
- 
+
   return (
     <div className="login-page">
       <div className="login-wrap">
@@ -102,7 +119,7 @@ export default function Login() {
           <div className="login-card__header">
             <h1>{mode === "login" ? "Login" : "Sign Up"}</h1>
           </div>
- 
+
           <form onSubmit={handleSubmit} noValidate className="login-card__body">
             <div className="input-group">
               <span className="input-icon" aria-hidden="true">
@@ -122,7 +139,7 @@ export default function Login() {
               />
             </div>
             <div className="field-error">{emailError}</div>
- 
+
             <div className="input-group">
               <span className="input-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="20" height="20">
@@ -141,13 +158,13 @@ export default function Login() {
               />
             </div>
             <div className="field-error">{passwordError}</div>
- 
+
             {mode === "login" && (
               <a href="#" onClick={handleForgotPassword} className="forgot-link">
                 Forgot Password?
               </a>
             )}
- 
+
             <button type="submit" disabled={loading} className="login-btn">
               <svg viewBox="0 0 24 24" width="18" height="18">
                 <path
@@ -163,15 +180,15 @@ export default function Login() {
                 ? "Login"
                 : "Create Account"}
             </button>
- 
+
             {status.text && (
               <div className={`status ${status.type}`}>{status.text}</div>
             )}
- 
+
             <div className="divider">
               <span>or</span>
             </div>
- 
+
             <a
               href="#"
               onClick={(e) => {
@@ -184,7 +201,7 @@ export default function Login() {
             </a>
           </form>
         </div>
- 
+
         {/* Brand panel */}
         <div className="brand-panel">
           <img src="/logo.svg" alt="Perez Printing Shop logo" className="brand-panel__logo" />
@@ -195,4 +212,3 @@ export default function Login() {
     </div>
   );
 }
- 

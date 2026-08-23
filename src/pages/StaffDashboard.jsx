@@ -1,8 +1,17 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import "./StaffDashboard.css";
 
 export default function StaffDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  async function handleLogout() {
+    await logout();
+    navigate("/");
+  }
 
   const navItems = [
     {
@@ -104,7 +113,7 @@ export default function StaffDashboard() {
             </div>
           </div>
 
-          <button className="logout-btn">
+          <button className="logout-btn" onClick={handleLogout}>
             <svg viewBox="0 0 24 24" width="18" height="18">
               <path
                 fill="currentColor"
