@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { loginUser, signupUser, resetPassword, friendlyAuthError } from "../services/authService";
-import { createUserProfile, getUserProfile } from "../services/userServices";
+import { useNavigate, Link } from "react-router-dom";
+import { loginUser, resetPassword, friendlyAuthError } from "../services/authService";
+import { getUserProfile } from "../services/userServices";
 import "./Login.css";
 
 // Sends the user to the right dashboard based on their role.
@@ -14,29 +14,14 @@ function getRedirectPath(role) {
 export default function Login() {
   const navigate = useNavigate();
 
-  // Which form is showing: "login" or "signup"
-  const [mode, setMode] = useState("login");
-
-  // Field values
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // Validation error messages, shown under each field
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
-  // Success/error banner shown after submit
   const [status, setStatus] = useState({ text: "", type: "" });
-
-  // Disables the button + swaps its label while submitting
   const [loading, setLoading] = useState(false);
-
-  function toggleMode() {
-    setMode((prev) => (prev === "login" ? "signup" : "login"));
-    setStatus({ text: "", type: "" });
-    setEmailError("");
-    setPasswordError("");
-  }
 
   async function handleForgotPassword(e) {
     e.preventDefault();
@@ -85,25 +70,11 @@ export default function Login() {
 
     setLoading(true);
     try {
-      if (mode === "login") {
-        const userCredential = await loginUser(trimmedEmail, password);
-        const profile = await getUserProfile(userCredential.user.uid);
+      const userCredential = await loginUser(trimmedEmail, password);
+      const profile = await getUserProfile(userCredential.user.uid);
 
-        setStatus({ text: "Logged in successfully.", type: "success" });
-        navigate(getRedirectPath(profile?.role));
-      } else {
-        const userCredential = await signupUser(trimmedEmail, password);
-
-        // New accounts default to "customer" — an admin can upgrade
-        // someone's role later directly in Firestore.
-        await createUserProfile(userCredential.user.uid, {
-          email: trimmedEmail,
-          role: "customer",
-        });
-
-        setStatus({ text: "Account created.", type: "success" });
-        navigate("/dashboard");
-      }
+      setStatus({ text: "Logged in successfully.", type: "success" });
+      navigate(getRedirectPath(profile?.role));
     } catch (err) {
       setStatus({ text: friendlyAuthError(err.code), type: "error" });
     } finally {
@@ -117,7 +88,7 @@ export default function Login() {
         {/* Login card */}
         <div className="login-card">
           <div className="login-card__header">
-            <h1>{mode === "login" ? "Login" : "Sign Up"}</h1>
+            <h1>Login</h1>
           </div>
 
           <form onSubmit={handleSubmit} noValidate className="login-card__body">
@@ -159,11 +130,9 @@ export default function Login() {
             </div>
             <div className="field-error">{passwordError}</div>
 
-            {mode === "login" && (
-              <a href="#" onClick={handleForgotPassword} className="forgot-link">
-                Forgot Password?
-              </a>
-            )}
+            <a href="#" onClick={handleForgotPassword} className="forgot-link">
+              Forgot Password?
+            </a>
 
             <button type="submit" disabled={loading} className="login-btn">
               <svg viewBox="0 0 24 24" width="18" height="18">
@@ -172,13 +141,7 @@ export default function Login() {
                   d="M10 17v-3H3v-4h7V7l5 5-5 5Zm9 2H12v-2h7V7h-7V5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2Z"
                 />
               </svg>
-              {loading
-                ? mode === "login"
-                  ? "Logging in..."
-                  : "Creating account..."
-                : mode === "login"
-                ? "Login"
-                : "Create Account"}
+              {loading ? "Logging in..." : "Login"}
             </button>
 
             {status.text && (
@@ -189,22 +152,15 @@ export default function Login() {
               <span>or</span>
             </div>
 
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                toggleMode();
-              }}
-              className="create-account"
-            >
-              {mode === "login" ? "Create Account" : "Back to Login"}
-            </a>
+            <Link to="/create-account" className="create-account">
+              Create Account
+            </Link>
           </form>
         </div>
 
         {/* Brand panel */}
         <div className="brand-panel">
-          <img src="publiclogo.png" alt="Perez Printing Shop logo" className="brand-panel__logo" />
+          <img src="/publiclogo.png" alt="Perez Printing Shop logo" className="brand-panel__logo" />
           <h2 className="brand-panel__title">PEREZ</h2>
           <p className="brand-panel__subtitle">Printing Shop</p>
         </div>

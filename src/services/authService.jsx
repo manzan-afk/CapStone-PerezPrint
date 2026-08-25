@@ -7,8 +7,12 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  signInWithPopup,
+  GoogleAuthProvider,
 } from "firebase/auth";
 import { auth } from "../firebase-config";
+
+const googleProvider = new GoogleAuthProvider();
 
 /**
  * Logs a user in with Firebase Authentication.
@@ -28,6 +32,14 @@ export function loginUser(email, password) {
  */
 export function signupUser(email, password) {
   return createUserWithEmailAndPassword(auth, email, password);
+}
+
+/**
+ * Signs in (or signs up, if it's their first time) using a Google account.
+ * @returns {Promise<import("firebase/auth").UserCredential>}
+ */
+export function signInWithGoogle() {
+  return signInWithPopup(auth, googleProvider);
 }
 
 /**
