@@ -160,7 +160,7 @@ export default function Login() {
 
         {/* Brand panel */}
         <div className="brand-panel">
-          <img src="/publiclogo.png" alt="Perez Printing Shop logo" className="brand-panel__logo" />
+          <img src="/logo.png" alt="Perez Printing Shop logo" className="brand-panel__logo" />
           <h2 className="brand-panel__title">PEREZ</h2>
           <p className="brand-panel__subtitle">Printing Shop</p>
         </div>
