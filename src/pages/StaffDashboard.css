@@ -36,6 +36,16 @@
 .sidebar__brand {
   margin-bottom: 36px;
   padding: 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar__logo {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .brand-title {

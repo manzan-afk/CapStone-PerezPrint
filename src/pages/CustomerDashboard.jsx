@@ -114,8 +114,11 @@ export default function CustomerDashboard() {
       {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? "sidebar--open" : ""}`}>
         <div className="sidebar__brand">
-          <h1 className="brand-title">PEREZ</h1>
-          <p className="brand-subtitle">Printing Shop</p>
+          <img src="/logo.png" alt="Perez Printing Shop logo" className="sidebar__logo" />
+          <div>
+            <h1 className="brand-title">PEREZ</h1>
+            <p className="brand-subtitle">Printing Shop</p>
+          </div>
         </div>
 
         <nav className="sidebar__nav">
