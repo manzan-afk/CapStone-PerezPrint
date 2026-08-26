@@ -11,16 +11,30 @@ function getRedirectPath(role) {
   return "/dashboard"; // default: customer
 }
 
+// Password requirement checks, used both for live feedback and validation.
+const passwordRules = [
+  { key: "length", label: "At least 8 characters", test: (pw) => pw.length >= 8 },
+  { key: "uppercase", label: "One uppercase letter", test: (pw) => /[A-Z]/.test(pw) },
+  { key: "number", label: "One number", test: (pw) => /[0-9]/.test(pw) },
+  {
+    key: "special",
+    label: "One special character",
+    test: (pw) => /[!@#$%^&*(),.?":{}|<>_\-+=[\]/\\;'~`]/.test(pw),
+  },
+];
+
 export default function CreateAccount() {
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
 
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [confirmPasswordError, setConfirmPasswordError] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [privacyError, setPrivacyError] = useState("");
 
@@ -32,6 +46,7 @@ export default function CreateAccount() {
     e.preventDefault();
     setEmailError("");
     setPasswordError("");
+    setConfirmPasswordError("");
     setPhoneError("");
     setPrivacyError("");
     setStatus({ text: "", type: "" });
@@ -51,8 +66,19 @@ export default function CreateAccount() {
     if (!password) {
       setPasswordError("Password is required.");
       valid = false;
-    } else if (password.length < 6) {
-      setPasswordError("Password must be at least 6 characters.");
+    } else {
+      const unmet = passwordRules.filter((rule) => !rule.test(password));
+      if (unmet.length > 0) {
+        setPasswordError("Password does not meet all requirements below.");
+        valid = false;
+      }
+    }
+
+    if (!confirmPassword) {
+      setConfirmPasswordError("Please confirm your password.");
+      valid = false;
+    } else if (confirmPassword !== password) {
+      setConfirmPasswordError("Passwords do not match.");
       valid = false;
     }
 
@@ -102,14 +128,12 @@ export default function CreateAccount() {
       const userCredential = await signInWithGoogle();
       const uid = userCredential.user.uid;
 
-      // Check if this Google account already has a profile (returning user)
-      // or if this is their first time signing in (brand new account).
       const existingProfile = await getUserProfile(uid);
 
       if (!existingProfile) {
         await createUserProfile(uid, {
           email: userCredential.user.email,
-          phone: "", // not collected via Google — can be added later in profile settings
+          phone: "",
           role: "customer",
           agreedToPrivacyPolicy: true,
           agreedToPrivacyPolicyAt: new Date().toISOString(),
@@ -171,7 +195,39 @@ export default function CreateAccount() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
+
+            {/* Live password requirement checklist */}
+            <ul className="password-rules">
+              {passwordRules.map((rule) => {
+                const met = rule.test(password);
+                return (
+                  <li key={rule.key} className={met ? "rule-met" : "rule-unmet"}>
+                    <span className="rule-icon">{met ? "✓" : "•"}</span>
+                    {rule.label}
+                  </li>
+                );
+              })}
+            </ul>
             <div className="field-error">{passwordError}</div>
+
+            <div className="input-group">
+              <span className="input-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20">
+                  <path
+                    fill="currentColor"
+                    d="M6 10V8a6 6 0 1 1 12 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Zm2 0h8V8a4 4 0 1 0-8 0Z"
+                  />
+                </svg>
+              </span>
+              <input
+                type="password"
+                placeholder="Confirm Password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+            <div className="field-error">{confirmPasswordError}</div>
 
             <div className="input-group">
               <span className="input-icon" aria-hidden="true">
