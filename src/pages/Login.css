@@ -101,13 +101,55 @@
 
 /* ---------- Links ---------- */
 
+.password-field-wrap {
+  position: relative;
+}
+
+.password-rules-popup {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #e2e5ea;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(20, 25, 40, 0.12);
+  padding: 12px 14px;
+  z-index: 20;
+  animation: rules-pop-in 0.12s ease-out;
+}
+
+.password-rules-popup::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 24px;
+  width: 12px;
+  height: 12px;
+  background: #ffffff;
+  border-left: 1px solid #e2e5ea;
+  border-top: 1px solid #e2e5ea;
+  transform: rotate(45deg);
+}
+
+@keyframes rules-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .password-rules {
   list-style: none;
-  margin: 4px 2px 10px;
+  margin: 0;
   padding: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px 10px;
+  gap: 6px 12px;
 }
 
 .password-rules li {
@@ -119,7 +161,7 @@
 }
 
 .password-rules .rule-unmet {
-  color: #a7adba;
+  color: #e5484d;
 }
 
 .password-rules .rule-met {

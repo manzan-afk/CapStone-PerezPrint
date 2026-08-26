@@ -41,6 +41,7 @@ export default function CreateAccount() {
   const [status, setStatus] = useState({ text: "", type: "" });
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [showPasswordRules, setShowPasswordRules] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -178,7 +179,7 @@ export default function CreateAccount() {
             </div>
             <div className="field-error">{emailError}</div>
 
-            <div className="input-group">
+            <div className="input-group password-field-wrap">
               <span className="input-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="20" height="20">
                   <path
@@ -193,21 +194,26 @@ export default function CreateAccount() {
                 autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onFocus={() => setShowPasswordRules(true)}
+                onBlur={() => setShowPasswordRules(false)}
               />
-            </div>
 
-            {/* Live password requirement checklist */}
-            <ul className="password-rules">
-              {passwordRules.map((rule) => {
-                const met = rule.test(password);
-                return (
-                  <li key={rule.key} className={met ? "rule-met" : "rule-unmet"}>
-                    <span className="rule-icon">{met ? "✓" : "•"}</span>
-                    {rule.label}
-                  </li>
-                );
-              })}
-            </ul>
+              {showPasswordRules && (
+                <div className="password-rules-popup">
+                  <ul className="password-rules">
+                    {passwordRules.map((rule) => {
+                      const met = rule.test(password);
+                      return (
+                        <li key={rule.key} className={met ? "rule-met" : "rule-unmet"}>
+                          <span className="rule-icon">{met ? "✓" : "✕"}</span>
+                          {rule.label}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
             <div className="field-error">{passwordError}</div>
 
             <div className="input-group">
