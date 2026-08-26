@@ -79,6 +79,35 @@
   box-sizing: border-box;
 }
 
+.input-group--password input {
+  padding-right: 42px;
+}
+
+.toggle-visibility {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8a92a3;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.toggle-visibility:hover {
+  color: #1b2436;
+}
+
+.toggle-visibility:focus-visible {
+  outline: 2px solid #ff8a1e;
+  outline-offset: 1px;
+}
+
 .input-group input::placeholder {
   color: #a7adba;
 }

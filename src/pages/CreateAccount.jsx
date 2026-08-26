@@ -42,6 +42,8 @@ export default function CreateAccount() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showPasswordRules, setShowPasswordRules] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -179,7 +181,7 @@ export default function CreateAccount() {
             </div>
             <div className="field-error">{emailError}</div>
 
-            <div className="input-group password-field-wrap">
+            <div className="input-group password-field-wrap input-group--password">
               <span className="input-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="20" height="20">
                   <path
@@ -189,7 +191,7 @@ export default function CreateAccount() {
                 </svg>
               </span>
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 placeholder="Password"
                 autoComplete="new-password"
                 value={password}
@@ -197,6 +199,29 @@ export default function CreateAccount() {
                 onFocus={() => setShowPasswordRules(true)}
                 onBlur={() => setShowPasswordRules(false)}
               />
+              <button
+                type="button"
+                className="toggle-visibility"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  <svg viewBox="0 0 24 24" width="18" height="18">
+                    <path
+                      fill="currentColor"
+                      d="M12 6c-5 0-9.3 3.1-11 7.5C2.7 17.9 7 21 12 21s9.3-3.1 11-7.5C21.3 9.1 17 6 12 6Zm0 12.5c-2.8 0-5-2.2-5-5s2.2-5 5-5 5 2.2 5 5-2.2 5-5 5Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"
+                    />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="18" height="18">
+                    <path
+                      fill="currentColor"
+                      d="m2 4.3 1.4-1.4 18.7 18.7-1.4 1.4-3.1-3.1c-1.7.7-3.6 1.1-5.6 1.1-5 0-9.3-3.1-11-7.5.8-2 2.1-3.8 3.8-5.1L2 4.3Zm5.5 5.5 1.6 1.6c-.1.2-.1.4-.1.6 0 1.7 1.3 3 3 3 .2 0 .4 0 .6-.1l1.6 1.6c-.7.3-1.4.5-2.2.5-2.8 0-5-2.2-5-5 0-.8.2-1.5.5-2.2Zm4.4-2.8c2.8 0 5 2.2 5 5 0 .5-.1 1-.2 1.5l2.9 2.9c1.4-1.2 2.5-2.7 3.2-4.4-1.7-4.4-6-7.5-11-7.5-1.3 0-2.6.2-3.7.6l2.2 2.2c.5-.2 1-.3 1.6-.3Z"
+                    />
+                  </svg>
+                )}
+              </button>
 
               {showPasswordRules && (
                 <div className="password-rules-popup">
@@ -216,7 +241,7 @@ export default function CreateAccount() {
             </div>
             <div className="field-error">{passwordError}</div>
 
-            <div className="input-group">
+            <div className="input-group input-group--password">
               <span className="input-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="20" height="20">
                   <path
@@ -226,12 +251,35 @@ export default function CreateAccount() {
                 </svg>
               </span>
               <input
-                type="password"
+                type={showConfirmPassword ? "text" : "password"}
                 placeholder="Confirm Password"
                 autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
               />
+              <button
+                type="button"
+                className="toggle-visibility"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setShowConfirmPassword((v) => !v)}
+                aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+              >
+                {showConfirmPassword ? (
+                  <svg viewBox="0 0 24 24" width="18" height="18">
+                    <path
+                      fill="currentColor"
+                      d="M12 6c-5 0-9.3 3.1-11 7.5C2.7 17.9 7 21 12 21s9.3-3.1 11-7.5C21.3 9.1 17 6 12 6Zm0 12.5c-2.8 0-5-2.2-5-5s2.2-5 5-5 5 2.2 5 5-2.2 5-5 5Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"
+                    />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="18" height="18">
+                    <path
+                      fill="currentColor"
+                      d="m2 4.3 1.4-1.4 18.7 18.7-1.4 1.4-3.1-3.1c-1.7.7-3.6 1.1-5.6 1.1-5 0-9.3-3.1-11-7.5.8-2 2.1-3.8 3.8-5.1L2 4.3Zm5.5 5.5 1.6 1.6c-.1.2-.1.4-.1.6 0 1.7 1.3 3 3 3 .2 0 .4 0 .6-.1l1.6 1.6c-.7.3-1.4.5-2.2.5-2.8 0-5-2.2-5-5 0-.8.2-1.5.5-2.2Zm4.4-2.8c2.8 0 5 2.2 5 5 0 .5-.1 1-.2 1.5l2.9 2.9c1.4-1.2 2.5-2.7 3.2-4.4-1.7-4.4-6-7.5-11-7.5-1.3 0-2.6.2-3.7.6l2.2 2.2c.5-.2 1-.3 1.6-.3Z"
+                    />
+                  </svg>
+                )}
+              </button>
             </div>
             <div className="field-error">{confirmPasswordError}</div>
 
