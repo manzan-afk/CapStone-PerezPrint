@@ -7,6 +7,7 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -15,9 +16,11 @@ export function AuthProvider({ children }) {
       setUser(currentUser);
 
       if (currentUser) {
-        const profile = await getUserProfile(currentUser.uid);
-        setRole(profile?.role ?? "customer");
+        const fetchedProfile = await getUserProfile(currentUser.uid);
+        setProfile(fetchedProfile);
+        setRole(fetchedProfile?.role ?? "customer");
       } else {
+        setProfile(null);
         setRole(null);
       }
 
@@ -33,6 +36,7 @@ export function AuthProvider({ children }) {
 
   const value = {
     user,
+    profile,
     role,
     loading,
     logout,

@@ -6,7 +6,7 @@ import "./StaffDashboard.css";
 export default function StaffDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, user, profile } = useAuth();
 
   async function handleLogout() {
     await logout();
@@ -111,8 +111,16 @@ export default function StaffDashboard() {
               </svg>
             </div>
             <div className="user-text">
-              <span className="user-name">Name</span>
-              <span className="user-role">Staff</span>
+              <span className="user-name">
+                {profile?.firstName || profile?.lastName
+                  ? `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim()
+                  : user?.email || "User"}
+              </span>
+              <span className="user-role">
+                {profile?.role
+                  ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1)
+                  : "Staff"}
+              </span>
             </div>
           </div>
 

@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
 import CreateAccount from "./pages/CreateAccount";
-import CompleteRegistration from "./pages/CompleteRegistration";
+import CompleteRegistration from "./pages/Completeregistration.jsx";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import AdminDashboard from "./pages/AdminDashboard";
 import StaffDashboard from "./pages/StaffDashboard";

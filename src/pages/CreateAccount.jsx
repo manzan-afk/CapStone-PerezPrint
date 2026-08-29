@@ -26,12 +26,16 @@ const passwordRules = [
 export default function CreateAccount() {
   const navigate = useNavigate();
 
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
 
+  const [firstNameError, setFirstNameError] = useState("");
+  const [lastNameError, setLastNameError] = useState("");
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
@@ -47,6 +51,8 @@ export default function CreateAccount() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    setFirstNameError("");
+    setLastNameError("");
     setEmailError("");
     setPasswordError("");
     setConfirmPasswordError("");
@@ -55,8 +61,20 @@ export default function CreateAccount() {
     setStatus({ text: "", type: "" });
 
     let valid = true;
+    const trimmedFirstName = firstName.trim();
+    const trimmedLastName = lastName.trim();
     const trimmedEmail = email.trim();
     const trimmedPhone = phone.trim();
+
+    if (!trimmedFirstName) {
+      setFirstNameError("First name is required.");
+      valid = false;
+    }
+
+    if (!trimmedLastName) {
+      setLastNameError("Last name is required.");
+      valid = false;
+    }
 
     if (!trimmedEmail) {
       setEmailError("Email is required.");
@@ -107,6 +125,8 @@ export default function CreateAccount() {
       // New accounts default to "customer" — an admin can upgrade
       // someone's role later directly in Firestore.
       await createUserProfile(userCredential.user.uid, {
+        firstName: trimmedFirstName,
+        lastName: trimmedLastName,
         email: trimmedEmail,
         phone: trimmedPhone,
         role: "customer",
@@ -158,6 +178,32 @@ export default function CreateAccount() {
           </div>
 
           <form onSubmit={handleSubmit} noValidate className="login-card__body">
+            <label className="field-label" htmlFor="firstName">First Name</label>
+            <div className="input-group">
+              <input
+                id="firstName"
+                type="text"
+                placeholder="First Name"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                style={{ paddingLeft: 14 }}
+              />
+            </div>
+            <div className="field-error">{firstNameError}</div>
+
+            <label className="field-label" htmlFor="lastName">Last Name</label>
+            <div className="input-group">
+              <input
+                id="lastName"
+                type="text"
+                placeholder="Last Name"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                style={{ paddingLeft: 14 }}
+              />
+            </div>
+            <div className="field-error">{lastNameError}</div>
+
             <div className="input-group">
               <span className="input-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="20" height="20">
