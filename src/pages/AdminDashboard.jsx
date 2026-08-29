@@ -60,12 +60,16 @@ export default function AdminDashboard() {
         <div className="sidebar__footer">
           <div className="user-info">
             <div className="user-avatar">
-              <svg viewBox="0 0 24 24" width="22" height="22">
-                <path
-                  fill="currentColor"
-                  d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5Z"
-                />
-              </svg>
+              {user?.photoURL ? (
+                <img src={user.photoURL} alt="Profile photo" className="user-avatar-img" />
+              ) : (
+                <svg viewBox="0 0 24 24" width="22" height="22">
+                  <path
+                    fill="currentColor"
+                    d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5Z"
+                  />
+                </svg>
+              )}
             </div>
             <div className="user-text">
               <span className="user-name">
@@ -78,6 +82,9 @@ export default function AdminDashboard() {
                   ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1)
                   : "Admin"}
               </span>
+              {user?.email && (
+                <span className="user-email">{user.email}</span>
+              )}
             </div>
           </div>
 
