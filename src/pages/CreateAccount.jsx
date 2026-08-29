@@ -134,14 +134,10 @@ export default function CreateAccount() {
       const existingProfile = await getUserProfile(uid);
 
       if (!existingProfile) {
-        await createUserProfile(uid, {
-          email: userCredential.user.email,
-          phone: "",
-          role: "customer",
-          agreedToPrivacyPolicy: true,
-          agreedToPrivacyPolicyAt: new Date().toISOString(),
-        });
-        navigate("/dashboard");
+        // First time signing in with this Google account — send them to
+        // finish setting up their profile (name, phone, privacy consent)
+        // instead of creating a bare-bones profile automatically.
+        navigate("/complete-registration");
       } else {
         navigate(getRedirectPath(existingProfile.role));
       }
