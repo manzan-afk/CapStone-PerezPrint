@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getAllUsers, updateUserProfile } from "../services/userServices";
+import { getAllServices, addService, updateService, deleteService } from "../services/servicesService";
 import "./AdminDashboard.css";
 
 const ROLES = ["customer", "staff", "admin"];
@@ -85,6 +86,24 @@ export default function AdminDashboard() {
             </svg>
             User Management
           </a>
+
+          <a
+            href="#"
+            className={`nav-item ${view === "services" ? "nav-item--active" : ""}`}
+            onClick={(e) => {
+              e.preventDefault();
+              setView("services");
+              setSidebarOpen(false);
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20">
+              <path
+                fill="currentColor"
+                d="M3 3h8v8H3V3Zm10 0h8v8h-8V3ZM3 13h8v8H3v-8Zm13.5 0 1.6 3.4L21.5 17l-2.6 2.4L19.6 23l-3.1-1.8L13.4 23l.7-3.6L11.5 17l3.4-.6L16.5 13Z"
+              />
+            </svg>
+            Services
+          </a>
         </nav>
 
         <div className="sidebar__footer">
@@ -133,16 +152,24 @@ export default function AdminDashboard() {
       {/* Main content */}
       <main className="dashboard-main">
         <header className="dashboard-header">
-          <h2>{view === "dashboard" ? "Dashboard" : "User Management"}</h2>
+          <h2>
+            {view === "dashboard"
+              ? "Dashboard"
+              : view === "users"
+              ? "User Management"
+              : "Services"}
+          </h2>
         </header>
 
-        {view === "dashboard" ? (
+        {view === "dashboard" && (
           <div className="dashboard-content dashboard-content--empty">
             {/* Intentionally blank — content coming later */}
           </div>
-        ) : (
-          <UserManagement currentUid={user?.uid} />
         )}
+
+        {view === "users" && <UserManagement currentUid={user?.uid} />}
+
+        {view === "services" && <ServicesManagement />}
       </main>
     </div>
   );
@@ -261,6 +288,284 @@ function UserManagement({ currentUid }) {
 
         {users.length === 0 && (
           <div className="um-empty">No registered users yet.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ServicesManagement() {
+  const [services, setServices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // New service form
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [price, setPrice] = useState("");
+  const [unit, setUnit] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  // Per-row edit state
+  const [editingId, setEditingId] = useState(null);
+  const [editValues, setEditValues] = useState({});
+  const [savingId, setSavingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+
+  useEffect(() => {
+    loadServices();
+  }, []);
+
+  async function loadServices() {
+    setLoading(true);
+    setError("");
+    try {
+      const all = await getAllServices();
+      setServices(all);
+    } catch (err) {
+      setError("Failed to load services. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAddService(e) {
+    e.preventDefault();
+    setFormError("");
+
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setFormError("Service name is required.");
+      return;
+    }
+    if (price && isNaN(Number(price))) {
+      setFormError("Price must be a number.");
+      return;
+    }
+
+    setAdding(true);
+    try {
+      const newId = await addService({
+        name: trimmedName,
+        description: description.trim(),
+        price: price ? Number(price) : null,
+        unit: unit.trim(),
+      });
+      setServices((prev) => [
+        ...prev,
+        { id: newId, name: trimmedName, description: description.trim(), price: price ? Number(price) : null, unit: unit.trim() },
+      ]);
+      setName("");
+      setDescription("");
+      setPrice("");
+      setUnit("");
+    } catch (err) {
+      setFormError("Failed to add service. Please try again.");
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  function startEdit(svc) {
+    setEditingId(svc.id);
+    setEditValues({
+      name: svc.name || "",
+      description: svc.description || "",
+      price: svc.price ?? "",
+      unit: svc.unit || "",
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditValues({});
+  }
+
+  async function saveEdit(id) {
+    if (!editValues.name?.trim()) return;
+
+    setSavingId(id);
+    try {
+      const updated = {
+        name: editValues.name.trim(),
+        description: (editValues.description || "").trim(),
+        price: editValues.price === "" ? null : Number(editValues.price),
+        unit: (editValues.unit || "").trim(),
+      };
+      await updateService(id, updated);
+      setServices((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, ...updated } : s))
+      );
+      setEditingId(null);
+    } catch (err) {
+      setError("Failed to update service. Please try again.");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function handleDelete(id) {
+    setDeletingId(id);
+    try {
+      await deleteService(id);
+      setServices((prev) => prev.filter((s) => s.id !== id));
+    } catch (err) {
+      setError("Failed to delete service. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  if (loading) {
+    return <div className="dashboard-content">Loading services...</div>;
+  }
+
+  return (
+    <div className="dashboard-content">
+      {error && <div className="um-error">{error}</div>}
+
+      {/* Add new service form */}
+      <form className="svc-form" onSubmit={handleAddService}>
+        <div className="svc-form__row">
+          <input
+            type="text"
+            placeholder="Service name (e.g. Business Cards)"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="svc-input svc-input--name"
+          />
+          <input
+            type="text"
+            placeholder="Description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="svc-input svc-input--desc"
+          />
+          <input
+            type="number"
+            placeholder="Price"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            className="svc-input svc-input--price"
+            min="0"
+            step="0.01"
+          />
+          <input
+            type="text"
+            placeholder="Unit (e.g. per piece)"
+            value={unit}
+            onChange={(e) => setUnit(e.target.value)}
+            className="svc-input svc-input--unit"
+          />
+          <button type="submit" className="svc-add-btn" disabled={adding}>
+            {adding ? "Adding..." : "+ Add Service"}
+          </button>
+        </div>
+        {formError && <div className="field-error">{formError}</div>}
+      </form>
+
+      {/* Services table */}
+      <div className="um-table-wrap">
+        <table className="um-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Price</th>
+              <th>Unit</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {services.map((svc) => {
+              const isEditing = editingId === svc.id;
+              return (
+                <tr key={svc.id}>
+                  {isEditing ? (
+                    <>
+                      <td>
+                        <input
+                          className="svc-edit-input"
+                          value={editValues.name}
+                          onChange={(e) =>
+                            setEditValues((v) => ({ ...v, name: e.target.value }))
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="svc-edit-input"
+                          value={editValues.description}
+                          onChange={(e) =>
+                            setEditValues((v) => ({ ...v, description: e.target.value }))
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="svc-edit-input svc-edit-input--price"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={editValues.price}
+                          onChange={(e) =>
+                            setEditValues((v) => ({ ...v, price: e.target.value }))
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="svc-edit-input"
+                          value={editValues.unit}
+                          onChange={(e) =>
+                            setEditValues((v) => ({ ...v, unit: e.target.value }))
+                          }
+                        />
+                      </td>
+                      <td className="svc-actions">
+                        <button
+                          className="um-save-btn"
+                          onClick={() => saveEdit(svc.id)}
+                          disabled={savingId === svc.id}
+                        >
+                          {savingId === svc.id ? "Saving..." : "Save"}
+                        </button>
+                        <button className="svc-cancel-btn" onClick={cancelEdit}>
+                          Cancel
+                        </button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td>{svc.name}</td>
+                      <td className="um-muted">{svc.description || "—"}</td>
+                      <td className="um-muted">
+                        {svc.price != null ? `₱${svc.price.toFixed(2)}` : "—"}
+                      </td>
+                      <td className="um-muted">{svc.unit || "—"}</td>
+                      <td className="svc-actions">
+                        <button className="svc-edit-btn" onClick={() => startEdit(svc)}>
+                          Edit
+                        </button>
+                        <button
+                          className="svc-delete-btn"
+                          onClick={() => handleDelete(svc.id)}
+                          disabled={deletingId === svc.id}
+                        >
+                          {deletingId === svc.id ? "Deleting..." : "Delete"}
+                        </button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {services.length === 0 && (
+          <div className="um-empty">No services added yet.</div>
         )}
       </div>
     </div>
