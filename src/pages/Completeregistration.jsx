@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { createUserProfile } from "../services/userServices";
@@ -20,20 +20,6 @@ export default function CompleteRegistration() {
 
   const [status, setStatus] = useState({ text: "", type: "" });
   const [loading, setLoading] = useState(false);
-
-  // Pre-fill First/Last Name from the Google account's display name, once,
-  // as a convenient starting point — the person can still edit it before
-  // submitting. Doesn't overwrite anything they've already typed.
-  useEffect(() => {
-    if (!user?.displayName) return;
-
-    const parts = user.displayName.trim().split(/\s+/);
-    const guessedFirstName = parts[0] || "";
-    const guessedLastName = parts.slice(1).join(" ") || "";
-
-    setFirstName((prev) => prev || guessedFirstName);
-    setLastName((prev) => prev || guessedLastName);
-  }, [user]);
 
   // Not signed in at all — nothing to complete registration for.
   if (!authLoading && !user) {
@@ -124,8 +110,10 @@ export default function CompleteRegistration() {
             </div>
             <div className="field-hint">Signed in with Google — this email can't be changed here.</div>
 
+            <label className="field-label" htmlFor="firstName">First Name</label>
             <div className="input-group">
               <input
+                id="firstName"
                 type="text"
                 placeholder="First Name"
                 value={firstName}
@@ -135,8 +123,10 @@ export default function CompleteRegistration() {
             </div>
             <div className="field-error">{firstNameError}</div>
 
+            <label className="field-label" htmlFor="lastName">Last Name</label>
             <div className="input-group">
               <input
+                id="lastName"
                 type="text"
                 placeholder="Last Name"
                 value={lastName}
@@ -145,11 +135,6 @@ export default function CompleteRegistration() {
               />
             </div>
             <div className="field-error">{lastNameError}</div>
-            {user?.displayName && (
-              <div className="field-hint" style={{ marginTop: -6 }}>
-                Pre-filled from your Google account — feel free to edit.
-              </div>
-            )}
 
             <div className="input-group">
               <span className="input-icon" aria-hidden="true">
