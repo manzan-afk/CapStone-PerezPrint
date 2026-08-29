@@ -14,6 +14,11 @@ import { auth } from "../firebase-config";
 
 const googleProvider = new GoogleAuthProvider();
 
+// Always show Google's "choose an account" screen, even if the browser
+// is already signed into a Google account — lets the person pick a
+// different one instead of silently reusing whichever is active.
+googleProvider.setCustomParameters({ prompt: "select_account" });
+
 /**
  * Logs a user in with Firebase Authentication.
  * @param {string} email
