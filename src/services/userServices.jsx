@@ -2,7 +2,7 @@
 // Handles reading/writing user profile data in Firestore, keyed by
 // the Firebase Auth UID (see authService.jsx for authentication itself).
 
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, getDocs, collection, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase-config";
 
 /**
@@ -37,4 +37,16 @@ export async function getUserProfile(uid) {
  */
 export function updateUserProfile(uid, data) {
   return updateDoc(doc(db, "users", uid), data);
+}
+
+/**
+ * Fetches every user profile document — for admin user management.
+ * @returns {Promise<Array<object>>} array of profiles, each including its `id` (UID)
+ */
+export async function getAllUsers() {
+  const snapshot = await getDocs(collection(db, "users"));
+  return snapshot.docs.map((docSnap) => ({
+    id: docSnap.id,
+    ...docSnap.data(),
+  }));
 }

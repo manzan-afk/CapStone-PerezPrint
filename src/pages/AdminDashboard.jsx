@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { getAllUsers, updateUserProfile } from "../services/userServices";
 import "./AdminDashboard.css";
+
+const ROLES = ["customer", "staff", "admin"];
 
 export default function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [view, setView] = useState("dashboard"); // "dashboard" | "users"
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
 
@@ -46,7 +50,15 @@ export default function AdminDashboard() {
         </div>
 
         <nav className="sidebar__nav">
-          <a href="#" className="nav-item nav-item--active">
+          <a
+            href="#"
+            className={`nav-item ${view === "dashboard" ? "nav-item--active" : ""}`}
+            onClick={(e) => {
+              e.preventDefault();
+              setView("dashboard");
+              setSidebarOpen(false);
+            }}
+          >
             <svg viewBox="0 0 24 24" width="20" height="20">
               <path
                 fill="currentColor"
@@ -54,6 +66,24 @@ export default function AdminDashboard() {
               />
             </svg>
             Dashboard
+          </a>
+
+          <a
+            href="#"
+            className={`nav-item ${view === "users" ? "nav-item--active" : ""}`}
+            onClick={(e) => {
+              e.preventDefault();
+              setView("users");
+              setSidebarOpen(false);
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20">
+              <path
+                fill="currentColor"
+                d="M16 11c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3Zm-8 0c1.7 0 3-1.3 3-3S9.7 5 8 5 5 6.3 5 8s1.3 3 3 3Zm0 2c-2.3 0-7 1.2-7 3.5V19h9v-2.5c0-.9.3-2 .9-2.9C10.1 13.2 8.9 13 8 13Zm8 0c-.3 0-.6 0-.9.1.7 1 1 2.2 1 3.4V19h7v-2.5c0-2.3-4.7-3.5-7-3.5Z"
+              />
+            </svg>
+            User Management
           </a>
         </nav>
 
@@ -103,13 +133,136 @@ export default function AdminDashboard() {
       {/* Main content */}
       <main className="dashboard-main">
         <header className="dashboard-header">
-          <h2>Dashboard</h2>
+          <h2>{view === "dashboard" ? "Dashboard" : "User Management"}</h2>
         </header>
 
-        <div className="dashboard-content dashboard-content--empty">
-          {/* Intentionally blank — content coming later */}
-        </div>
+        {view === "dashboard" ? (
+          <div className="dashboard-content dashboard-content--empty">
+            {/* Intentionally blank — content coming later */}
+          </div>
+        ) : (
+          <UserManagement currentUid={user?.uid} />
+        )}
       </main>
+    </div>
+  );
+}
+
+function UserManagement({ currentUid }) {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [savingId, setSavingId] = useState(null);
+  const [savedId, setSavedId] = useState(null);
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  async function loadUsers() {
+    setLoading(true);
+    setError("");
+    try {
+      const allUsers = await getAllUsers();
+      setUsers(allUsers);
+    } catch (err) {
+      setError("Failed to load users. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleRoleChange(uid, newRole) {
+    setUsers((prev) =>
+      prev.map((u) => (u.id === uid ? { ...u, role: newRole } : u))
+    );
+  }
+
+  async function handleSaveRole(uid, newRole) {
+    setSavingId(uid);
+    setSavedId(null);
+    try {
+      await updateUserProfile(uid, { role: newRole });
+      setSavedId(uid);
+      setTimeout(() => setSavedId(null), 2000);
+    } catch (err) {
+      setError("Failed to update role. Please try again.");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  function displayName(u) {
+    if (u.firstName || u.lastName) {
+      return `${u.firstName || ""} ${u.lastName || ""}`.trim();
+    }
+    return u.email || "—";
+  }
+
+  if (loading) {
+    return <div className="dashboard-content">Loading users...</div>;
+  }
+
+  return (
+    <div className="dashboard-content">
+      {error && <div className="um-error">{error}</div>}
+
+      <div className="um-table-wrap">
+        <table className="um-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Role</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id}>
+                <td>
+                  {displayName(u)}
+                  {u.id === currentUid && <span className="um-you-tag">You</span>}
+                </td>
+                <td className="um-muted">{u.email || "—"}</td>
+                <td className="um-muted">{u.phone || "—"}</td>
+                <td>
+                  <select
+                    className="um-role-select"
+                    value={u.role || "customer"}
+                    onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                    disabled={u.id === currentUid}
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {r.charAt(0).toUpperCase() + r.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td>
+                  <button
+                    className="um-save-btn"
+                    onClick={() => handleSaveRole(u.id, u.role || "customer")}
+                    disabled={savingId === u.id || u.id === currentUid}
+                  >
+                    {savingId === u.id
+                      ? "Saving..."
+                      : savedId === u.id
+                      ? "Saved ✓"
+                      : "Save"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {users.length === 0 && (
+          <div className="um-empty">No registered users yet.</div>
+        )}
+      </div>
     </div>
   );
 }
