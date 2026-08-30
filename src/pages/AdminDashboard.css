@@ -570,3 +570,108 @@
     transition: none !important;
   }
 }
+
+/* ---------- Order Management ---------- */
+
+.ord-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ord-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.ord-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.ord-card__service {
+  font-weight: 700;
+  font-size: 14.5px;
+  color: var(--text-dark);
+  margin-right: 10px;
+}
+
+.ord-card__date {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ord-card__customer {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.ord-card__desc {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #3a4152;
+  line-height: 1.5;
+}
+
+.ord-card__files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ord-card__file-link {
+  font-size: 12px;
+  color: var(--navy);
+  text-decoration: none;
+  background: #f5f6f8;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 9px;
+}
+
+.ord-card__file-link:hover {
+  text-decoration: underline;
+}
+
+.ord-card__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.order-status {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.order-status--placed {
+  background: #eef1f5;
+  color: #4b5563;
+}
+
+.order-status--printing {
+  background: #fff4e0;
+  color: #b0670e;
+}
+
+.order-status--ready {
+  background: #e3f6ec;
+  color: #1e8a53;
+}
+
+.order-status--completed {
+  background: #e6f0ff;
+  color: #1d5fd6;
+}

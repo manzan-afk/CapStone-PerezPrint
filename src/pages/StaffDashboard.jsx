@@ -1,10 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { getAllOrders, updateOrderStatus } from "../services/ordersService";
 import "./StaffDashboard.css";
+
+const ORDER_STATUSES = ["placed", "printing", "ready", "completed"];
+
+function statusLabel(s) {
+  switch (s) {
+    case "placed":
+      return "Placed";
+    case "printing":
+      return "Printing";
+    case "ready":
+      return "Ready for Pickup";
+    case "completed":
+      return "Completed";
+    default:
+      return s || "Placed";
+  }
+}
 
 export default function StaffDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [view, setView] = useState("dashboard"); // "dashboard" | "orders"
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
 
@@ -15,8 +34,8 @@ export default function StaffDashboard() {
 
   const navItems = [
     {
+      key: "dashboard",
       label: "Dashboard",
-      active: true,
       icon: (
         <path
           fill="currentColor"
@@ -25,6 +44,7 @@ export default function StaffDashboard() {
       ),
     },
     {
+      key: "orders",
       label: "Orders",
       icon: (
         <path
@@ -34,6 +54,7 @@ export default function StaffDashboard() {
       ),
     },
     {
+      key: "pickup",
       label: "Pickup Schedule",
       icon: (
         <path
@@ -43,6 +64,7 @@ export default function StaffDashboard() {
       ),
     },
     {
+      key: "notifications",
       label: "Notifications",
       icon: (
         <path
@@ -52,6 +74,8 @@ export default function StaffDashboard() {
       ),
     },
   ];
+
+  const activeLabel = navItems.find((item) => item.key === view)?.label || "Dashboard";
 
   return (
     <div className="dashboard-layout">
@@ -88,9 +112,14 @@ export default function StaffDashboard() {
         <nav className="sidebar__nav">
           {navItems.map((item) => (
             <a
-              key={item.label}
+              key={item.key}
               href="#"
-              className={`nav-item ${item.active ? "nav-item--active" : ""}`}
+              className={`nav-item ${view === item.key ? "nav-item--active" : ""}`}
+              onClick={(e) => {
+                e.preventDefault();
+                setView(item.key);
+                setSidebarOpen(false);
+              }}
             >
               <svg viewBox="0 0 24 24" width="20" height="20">
                 {item.icon}
@@ -146,13 +175,154 @@ export default function StaffDashboard() {
       {/* Main content */}
       <main className="dashboard-main">
         <header className="dashboard-header">
-          <h2>Dashboard</h2>
+          <h2>{activeLabel}</h2>
         </header>
 
-        <div className="dashboard-content dashboard-content--empty">
-          {/* Intentionally blank — content coming later */}
-        </div>
+        {view === "dashboard" && (
+          <div className="dashboard-content dashboard-content--empty">
+            {/* Intentionally blank — content coming later */}
+          </div>
+        )}
+
+        {view === "orders" && <OrderManagement />}
+
+        {view !== "dashboard" && view !== "orders" && (
+          <div className="dashboard-content dashboard-content--empty">
+            Coming soon.
+          </div>
+        )}
       </main>
+    </div>
+  );
+}
+
+function OrderManagement() {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [savingId, setSavingId] = useState(null);
+  const [savedId, setSavedId] = useState(null);
+
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  async function loadOrders() {
+    setLoading(true);
+    setError("");
+    try {
+      const all = await getAllOrders();
+      setOrders(all);
+    } catch (err) {
+      setError("Failed to load orders. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleStatusChange(orderId, newStatus) {
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+    );
+  }
+
+  async function handleSaveStatus(orderId, status) {
+    setSavingId(orderId);
+    setSavedId(null);
+    try {
+      await updateOrderStatus(orderId, status);
+      setSavedId(orderId);
+      setTimeout(() => setSavedId(null), 2000);
+    } catch (err) {
+      setError("Failed to update status. Please try again.");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  function formatDate(ts) {
+    if (!ts?.toDate) return "—";
+    return ts.toDate().toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  if (loading) {
+    return <div className="dashboard-content">Loading orders...</div>;
+  }
+
+  return (
+    <div className="dashboard-content">
+      {error && <div className="um-error">{error}</div>}
+
+      {orders.length === 0 ? (
+        <div className="um-empty">No orders have been placed yet.</div>
+      ) : (
+        <div className="ord-list">
+          {orders.map((order) => (
+            <div key={order.id} className="ord-card">
+              <div className="ord-card__header">
+                <div>
+                  <span className="ord-card__service">{order.serviceName || "Service"}</span>
+                  <span className="ord-card__date">{formatDate(order.createdAt)}</span>
+                </div>
+                <span className={`order-status order-status--${order.status || "placed"}`}>
+                  {statusLabel(order.status)}
+                </span>
+              </div>
+
+              <div className="ord-card__customer">{order.customerEmail || "Unknown customer"}</div>
+
+              {order.description && (
+                <p className="ord-card__desc">{order.description}</p>
+              )}
+
+              {order.files?.length > 0 && (
+                <div className="ord-card__files">
+                  {order.files.map((f, i) => (
+                    <a
+                      key={i}
+                      href={f.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ord-card__file-link"
+                    >
+                      📎 {f.name}
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              <div className="ord-card__actions">
+                <select
+                  className="um-role-select"
+                  value={order.status || "placed"}
+                  onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                >
+                  {ORDER_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {statusLabel(s)}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="um-save-btn"
+                  onClick={() => handleSaveStatus(order.id, order.status || "placed")}
+                  disabled={savingId === order.id}
+                >
+                  {savingId === order.id
+                    ? "Saving..."
+                    : savedId === order.id
+                    ? "Saved ✓"
+                    : "Save"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

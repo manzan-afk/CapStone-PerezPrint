@@ -1,0 +1,108 @@
+// ordersService.jsx
+// Handles customer print orders: file uploads (via Cloudinary — no
+// Firebase billing plan required) and order records (Firestore
+// collection: "orders").
+
+import {
+  collection,
+  doc,
+  addDoc,
+  updateDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  serverTimestamp,
+} from "firebase/firestore";
+import { db } from "../firebase-config";
+
+// From your Cloudinary dashboard (Settings → Upload → Upload presets).
+// Cloud name is shown on your dashboard home page.
+const CLOUDINARY_CLOUD_NAME = "YOUR_CLOUD_NAME";
+const CLOUDINARY_UPLOAD_PRESET = "YOUR_UNSIGNED_UPLOAD_PRESET";
+
+/**
+ * Uploads one or more files to Cloudinary and returns their names and
+ * public URLs.
+ * @param {string} uid - the customer's Firebase Auth UID (used to tag/organize uploads)
+ * @param {File[]} files
+ * @returns {Promise<Array<{ name: string, url: string, size: number }>>}
+ */
+export async function uploadOrderFiles(uid, files) {
+  const uploads = await Promise.all(
+    files.map(async (file) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+      formData.append("folder", `orders/${uid}`);
+
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`,
+        { method: "POST", body: formData }
+      );
+
+      if (!response.ok) {
+        throw new Error("File upload failed");
+      }
+
+      const data = await response.json();
+      return { name: file.name, url: data.secure_url, size: file.size };
+    })
+  );
+  return uploads;
+}
+
+/**
+ * Creates a new order.
+ * @param {object} data - e.g. { customerId, customerEmail, serviceId, serviceName, description, files }
+ * @returns {Promise<string>} the new order's id
+ */
+export async function createOrder(data) {
+  const docRef = await addDoc(collection(db, "orders"), {
+    ...data,
+    status: "placed",
+    createdAt: serverTimestamp(),
+  });
+  return docRef.id;
+}
+
+/**
+ * Fetches all orders placed by a specific customer, newest first.
+ * @param {string} uid - the customer's Firebase Auth UID
+ * @returns {Promise<Array<object>>}
+ */
+export async function getUserOrders(uid) {
+  const q = query(
+    collection(db, "orders"),
+    where("customerId", "==", uid),
+    orderBy("createdAt", "desc")
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((docSnap) => ({
+    id: docSnap.id,
+    ...docSnap.data(),
+  }));
+}
+
+/**
+ * Updates an order's status (e.g. "placed", "printing", "ready", "completed").
+ * @param {string} orderId
+ * @param {string} status
+ * @returns {Promise<void>}
+ */
+export function updateOrderStatus(orderId, status) {
+  return updateDoc(doc(db, "orders", orderId), { status });
+}
+
+/**
+ * Fetches every order — for admin/staff order management.
+ * @returns {Promise<Array<object>>}
+ */
+export async function getAllOrders() {
+  const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((docSnap) => ({
+    id: docSnap.id,
+    ...docSnap.data(),
+  }));
+}

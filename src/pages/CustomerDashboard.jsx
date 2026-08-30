@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { getAllServices } from "../services/servicesService";
 import "./CustomerDashboard.css";
 
 export default function CustomerDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [view, setView] = useState("dashboard"); // "dashboard" | "services"
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
 
@@ -15,8 +17,8 @@ export default function CustomerDashboard() {
 
   const navItems = [
     {
+      key: "dashboard",
       label: "Dashboard",
-      active: true,
       icon: (
         <path
           fill="currentColor"
@@ -25,6 +27,7 @@ export default function CustomerDashboard() {
       ),
     },
     {
+      key: "services",
       label: "Services",
       icon: (
         <path
@@ -34,6 +37,7 @@ export default function CustomerDashboard() {
       ),
     },
     {
+      key: "orders",
       label: "My Orders",
       icon: (
         <path
@@ -43,6 +47,7 @@ export default function CustomerDashboard() {
       ),
     },
     {
+      key: "payments",
       label: "Payments",
       icon: (
         <path
@@ -52,6 +57,7 @@ export default function CustomerDashboard() {
       ),
     },
     {
+      key: "pickup",
       label: "Pickup Schedule",
       icon: (
         <path
@@ -61,6 +67,7 @@ export default function CustomerDashboard() {
       ),
     },
     {
+      key: "notifications",
       label: "Notifications",
       icon: (
         <path
@@ -70,6 +77,7 @@ export default function CustomerDashboard() {
       ),
     },
     {
+      key: "contacts",
       label: "Contacts",
       icon: (
         <path
@@ -79,6 +87,7 @@ export default function CustomerDashboard() {
       ),
     },
     {
+      key: "faqs",
       label: "FAQs",
       icon: (
         <path
@@ -88,6 +97,8 @@ export default function CustomerDashboard() {
       ),
     },
   ];
+
+  const activeLabel = navItems.find((item) => item.key === view)?.label || "Dashboard";
 
   return (
     <div className="dashboard-layout">
@@ -124,9 +135,14 @@ export default function CustomerDashboard() {
         <nav className="sidebar__nav">
           {navItems.map((item) => (
             <a
-              key={item.label}
+              key={item.key}
               href="#"
-              className={`nav-item ${item.active ? "nav-item--active" : ""}`}
+              className={`nav-item ${view === item.key ? "nav-item--active" : ""}`}
+              onClick={(e) => {
+                e.preventDefault();
+                setView(item.key);
+                setSidebarOpen(false);
+              }}
             >
               <svg viewBox="0 0 24 24" width="20" height="20">
                 {item.icon}
@@ -182,13 +198,79 @@ export default function CustomerDashboard() {
       {/* Main content */}
       <main className="dashboard-main">
         <header className="dashboard-header">
-          <h2>Dashboard</h2>
+          <h2>{activeLabel}</h2>
         </header>
 
-        <div className="dashboard-content dashboard-content--empty">
-          {/* Intentionally blank — content coming later */}
-        </div>
+        {view === "dashboard" && (
+          <div className="dashboard-content dashboard-content--empty">
+            {/* Intentionally blank — content coming later */}
+          </div>
+        )}
+
+        {view === "services" && <ServicesBrowser />}
+
+        {view !== "dashboard" && view !== "services" && (
+          <div className="dashboard-content dashboard-content--empty">
+            Coming soon.
+          </div>
+        )}
       </main>
+    </div>
+  );
+}
+
+function ServicesBrowser() {
+  const [services, setServices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    loadServices();
+  }, []);
+
+  async function loadServices() {
+    setLoading(true);
+    setError("");
+    try {
+      const all = await getAllServices();
+      setServices(all);
+    } catch (err) {
+      setError("Failed to load services. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="dashboard-content">Loading services...</div>;
+  }
+
+  return (
+    <div className="dashboard-content">
+      {error && <div className="svc-browse-error">{error}</div>}
+
+      {services.length === 0 ? (
+        <div className="svc-browse-empty">
+          No services are available yet — check back soon.
+        </div>
+      ) : (
+        <div className="svc-browse-grid">
+          {services.map((svc) => (
+            <div key={svc.id} className="svc-card">
+              <h3 className="svc-card__name">{svc.name}</h3>
+              {svc.description && (
+                <p className="svc-card__desc">{svc.description}</p>
+              )}
+              <div className="svc-card__footer">
+                <span className="svc-card__price">
+                  {svc.price != null ? `₱${Number(svc.price).toFixed(2)}` : "Contact for pricing"}
+                </span>
+                {svc.unit && <span className="svc-card__unit">{svc.unit}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
