@@ -198,12 +198,24 @@ export default function AdminDashboard() {
   );
 }
 
+const ROLE_BADGE_LABELS = {
+  admin: "ADMIN",
+  staff: "STAFF",
+  customer: "CUSTOMER",
+};
+
 function UserManagement({ currentUid }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [pageSize, setPageSize] = useState(12);
+  const [page, setPage] = useState(1);
+
   const [savingId, setSavingId] = useState(null);
-  const [savedId, setSavedId] = useState(null);
+  const [showAddInfo, setShowAddInfo] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -222,19 +234,25 @@ function UserManagement({ currentUid }) {
     }
   }
 
-  function handleRoleChange(uid, newRole) {
+  function displayName(u) {
+    if (u.firstName || u.lastName) {
+      return `${u.firstName || ""} ${u.lastName || ""}`.trim();
+    }
+    return u.email || "—";
+  }
+
+  function initial(u) {
+    const name = displayName(u);
+    return name.charAt(0).toUpperCase() || "?";
+  }
+
+  async function handleRoleChange(uid, newRole) {
+    setSavingId(uid);
     setUsers((prev) =>
       prev.map((u) => (u.id === uid ? { ...u, role: newRole } : u))
     );
-  }
-
-  async function handleSaveRole(uid, newRole) {
-    setSavingId(uid);
-    setSavedId(null);
     try {
       await updateUserProfile(uid, { role: newRole });
-      setSavedId(uid);
-      setTimeout(() => setSavedId(null), 2000);
     } catch (err) {
       setError("Failed to update role. Please try again.");
     } finally {
@@ -242,12 +260,21 @@ function UserManagement({ currentUid }) {
     }
   }
 
-  function displayName(u) {
-    if (u.firstName || u.lastName) {
-      return `${u.firstName || ""} ${u.lastName || ""}`.trim();
-    }
-    return u.email || "—";
-  }
+  // Filter by search term (name or email) and role
+  const filteredUsers = users.filter((u) => {
+    const matchesRole = roleFilter === "all" || (u.role || "customer") === roleFilter;
+    const term = searchTerm.trim().toLowerCase();
+    const matchesSearch =
+      !term ||
+      displayName(u).toLowerCase().includes(term) ||
+      (u.email || "").toLowerCase().includes(term);
+    return matchesRole && matchesSearch;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  const pageUsers = filteredUsers.slice(pageStart, pageStart + pageSize);
 
   if (loading) {
     return <div className="dashboard-content">Loading users...</div>;
@@ -257,62 +284,160 @@ function UserManagement({ currentUid }) {
     <div className="dashboard-content">
       {error && <div className="um-error">{error}</div>}
 
-      <div className="um-table-wrap">
-        <table className="um-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Phone</th>
-              <th>Role</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td>
-                  {displayName(u)}
-                  {u.id === currentUid && <span className="um-you-tag">You</span>}
-                </td>
-                <td className="um-muted">{u.email || "—"}</td>
-                <td className="um-muted">{u.phone || "—"}</td>
-                <td>
-                  <select
-                    className="um-role-select"
-                    value={u.role || "customer"}
-                    onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                    disabled={u.id === currentUid}
-                  >
-                    {ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {r.charAt(0).toUpperCase() + r.slice(1)}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <button
-                    className="um-save-btn"
-                    onClick={() => handleSaveRole(u.id, u.role || "customer")}
-                    disabled={savingId === u.id || u.id === currentUid}
-                  >
-                    {savingId === u.id
-                      ? "Saving..."
-                      : savedId === u.id
-                      ? "Saved ✓"
-                      : "Save"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Toolbar */}
+      <div className="um-toolbar">
+        <div className="um-search">
+          <svg viewBox="0 0 24 24" width="16" height="16">
+            <path
+              fill="currentColor"
+              d="m21 21-4.3-4.3m2.3-5.2a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z"
+              stroke="currentColor"
+              strokeWidth="2"
+              fill="none"
+            />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search users..."
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
 
-        {users.length === 0 && (
-          <div className="um-empty">No registered users yet.</div>
-        )}
+        <select
+          className="um-toolbar-select"
+          value={roleFilter}
+          onChange={(e) => {
+            setRoleFilter(e.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="all">All Roles</option>
+          <option value="admin">Admin</option>
+          <option value="staff">Staff</option>
+          <option value="customer">Customer</option>
+        </select>
+
+        <div className="um-show-control">
+          <span>Show</span>
+          <select
+            className="um-toolbar-select um-toolbar-select--small"
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+          >
+            <option value={8}>8</option>
+            <option value={12}>12</option>
+            <option value={24}>24</option>
+          </select>
+        </div>
+
+        <div className="um-add-user-wrap">
+          <button
+            type="button"
+            className="um-add-user-btn"
+            onClick={() => setShowAddInfo((v) => !v)}
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15">
+              <path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z" />
+            </svg>
+            Add User
+          </button>
+          {showAddInfo && (
+            <div className="um-add-user-popup">
+              New accounts are created by users themselves through the Sign
+              Up page — there's no manual "add user" here. Once someone
+              registers, you can find them in this list and change their
+              role.
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* User cards */}
+      {pageUsers.length === 0 ? (
+        <div className="um-empty">No users match your search.</div>
+      ) : (
+        <div className="um-grid">
+          {pageUsers.map((u) => {
+            const role = u.role || "customer";
+            const isYou = u.id === currentUid;
+            return (
+              <div key={u.id} className="um-card">
+                <div className="um-card__top">
+                  <div className={`um-avatar um-avatar--${role}`}>
+                    {u.photoURL ? (
+                      <img src={u.photoURL} alt="" className="um-avatar-img" />
+                    ) : (
+                      initial(u)
+                    )}
+                  </div>
+                  <div className="um-card__info">
+                    <div className="um-card__name-row">
+                      <span className="um-card__name">
+                        {displayName(u)}
+                        {isYou && <span className="um-you-tag">You</span>}
+                      </span>
+                    </div>
+                    <span className="um-card__email">{u.email || "—"}</span>
+                  </div>
+                </div>
+
+                <div className="um-card__bottom">
+                  <select
+                    className={`um-role-badge um-role-badge--${role}`}
+                    value={role}
+                    onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                    disabled={isYou || savingId === u.id}
+                    title={isYou ? "You can't change your own role" : "Change role"}
+                  >
+                    <option value="customer">CUSTOMER</option>
+                    <option value="staff">STAFF</option>
+                    <option value="admin">ADMIN</option>
+                  </select>
+                  <span className="um-card__id" title={u.id}>
+                    ID: {u.id.slice(0, 6)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pagination footer */}
+      {filteredUsers.length > 0 && (
+        <div className="um-footer">
+          <span className="um-footer__count">
+            Showing {pageStart + 1} to {Math.min(pageStart + pageSize, filteredUsers.length)} of{" "}
+            {filteredUsers.length} users
+          </span>
+          <div className="um-pagination">
+            <button
+              className="um-page-btn"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              aria-label="Previous page"
+            >
+              ‹
+            </button>
+            <span className="um-page-current">{currentPage}</span>
+            <button
+              className="um-page-btn"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              aria-label="Next page"
+            >
+              ›
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
