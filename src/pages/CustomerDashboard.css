@@ -757,3 +757,146 @@
   font-weight: 700;
   color: var(--text-dark);
 }
+
+/* ---------- Order card as clickable (reopen receipt) ---------- */
+
+.order-card--clickable {
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.order-card--clickable:hover {
+  box-shadow: 0 6px 18px rgba(20, 25, 40, 0.08);
+  border-color: #d3d7de;
+}
+
+.order-card__ref {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+/* ---------- Receipt ---------- */
+
+.receipt {
+  background: var(--white);
+  border-radius: 10px;
+  width: 100%;
+  max-width: 380px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 26px 26px 24px;
+  position: relative;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  text-align: center;
+}
+
+.receipt__meta-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-bottom: 18px;
+  padding-right: 20px;
+}
+
+.receipt__shop {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--navy);
+  letter-spacing: 0.5px;
+}
+
+.receipt__tagline {
+  margin: 2px 0 14px;
+  font-size: 13px;
+  color: var(--orange);
+  font-weight: 600;
+}
+
+.receipt__date {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  color: var(--text-dark);
+}
+
+.receipt__served {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.receipt__divider {
+  border-top: 1px dashed var(--border);
+  margin: 14px 0;
+}
+
+.receipt__line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13.5px;
+  color: var(--text-dark);
+  text-align: left;
+  padding: 2px 0;
+}
+
+.receipt__desc {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: left;
+  line-height: 1.5;
+}
+
+.receipt__total {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-dark);
+}
+
+.receipt__reference-box {
+  margin: 18px 0;
+  padding: 14px;
+  background: #fff8f0;
+  border: 1px dashed #ffcd94;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.receipt__reference-label {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.receipt__reference-value {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--orange);
+  font-family: ui-monospace, Consolas, monospace;
+  letter-spacing: 0.5px;
+}
+
+.receipt__reference-hint {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.receipt__thanks {
+  margin: 4px 0 18px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.receipt__done-btn {
+  width: 100%;
+}

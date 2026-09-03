@@ -210,11 +210,25 @@ export default function CustomerDashboard() {
           <ServicesBrowser
             uid={user?.uid}
             email={user?.email}
+            customerName={
+              profile?.firstName || profile?.lastName
+                ? `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim()
+                : user?.email || "Customer"
+            }
             onOrderPlaced={() => setView("orders")}
           />
         )}
 
-        {view === "orders" && <OrderHistory uid={user?.uid} />}
+        {view === "orders" && (
+          <OrderHistory
+            uid={user?.uid}
+            customerName={
+              profile?.firstName || profile?.lastName
+                ? `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim()
+                : user?.email || "Customer"
+            }
+          />
+        )}
 
         {view !== "dashboard" && view !== "services" && view !== "orders" && (
           <div className="dashboard-content dashboard-content--empty">
@@ -226,7 +240,7 @@ export default function CustomerDashboard() {
   );
 }
 
-function ServicesBrowser({ uid, email, onOrderPlaced }) {
+function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -291,6 +305,7 @@ function ServicesBrowser({ uid, email, onOrderPlaced }) {
           service={selectedService}
           uid={uid}
           email={email}
+          customerName={customerName}
           onClose={() => setSelectedService(null)}
           onSubmitted={() => {
             setSelectedService(null);
@@ -302,7 +317,7 @@ function ServicesBrowser({ uid, email, onOrderPlaced }) {
   );
 }
 
-function OrderModal({ service, uid, email, onClose, onSubmitted }) {
+function OrderModal({ service, uid, email, customerName, onClose, onSubmitted }) {
   const [description, setDescription] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [files, setFiles] = useState([]);
@@ -311,6 +326,7 @@ function OrderModal({ service, uid, email, onClose, onSubmitted }) {
   const [status, setStatus] = useState({ text: "", type: "" });
   const [submitting, setSubmitting] = useState(false);
   const [uploadNote, setUploadNote] = useState("");
+  const [placedOrder, setPlacedOrder] = useState(null);
 
   function handleFileChange(e) {
     const selected = Array.from(e.target.files || []);
@@ -356,7 +372,7 @@ function OrderModal({ service, uid, email, onClose, onSubmitted }) {
         uploadedFiles = await uploadOrderFiles(uid, files);
       }
 
-      await createOrder({
+      const orderData = {
         customerId: uid,
         customerEmail: email || "",
         serviceId: service.id,
@@ -367,18 +383,37 @@ function OrderModal({ service, uid, email, onClose, onSubmitted }) {
         unitPrice: service.price != null ? Number(service.price) : null,
         totalPrice: total,
         files: uploadedFiles,
-      });
+      };
 
-      setStatus({ text: "Order submitted successfully.", type: "success" });
-      setTimeout(() => {
-        onSubmitted();
-      }, 700);
+      const { id, referenceId } = await createOrder(orderData);
+
+      // Show the receipt instead of closing immediately — createdAt uses
+      // "now" locally since Firestore's serverTimestamp isn't available
+      // client-side until the write is confirmed and re-fetched.
+      setPlacedOrder({
+        id,
+        referenceId,
+        ...orderData,
+        createdAt: new Date(),
+      });
     } catch (err) {
       setStatus({ text: "Failed to submit order. Please try again.", type: "error" });
     } finally {
       setSubmitting(false);
       setUploadNote("");
     }
+  }
+
+  if (placedOrder) {
+    return (
+      <Receipt
+        order={placedOrder}
+        customerName={customerName}
+        onClose={() => {
+          onSubmitted();
+        }}
+      />
+    );
   }
 
   return (
@@ -487,9 +522,90 @@ function OrderModal({ service, uid, email, onClose, onSubmitted }) {
   );
 }
 
-function OrderHistory({ uid }) {
+function Receipt({ order, customerName, onClose }) {
+  function formatDate(value) {
+    const d = value?.toDate ? value.toDate() : value instanceof Date ? value : null;
+    if (!d) return "—";
+    return d.toLocaleString(undefined, {
+      month: "2-digit",
+      day: "2-digit",
+      year: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  return (
+    <div className="order-modal-overlay" onClick={onClose}>
+      <div className="receipt" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="order-modal__close"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          ✕
+        </button>
+
+        <div className="receipt__meta-row">
+          <span>{formatDate(order.createdAt)}</span>
+          <span>Receipt · {order.referenceId}</span>
+        </div>
+
+        <h2 className="receipt__shop">PEREZ</h2>
+        <p className="receipt__tagline">Printing Shop</p>
+
+        <p className="receipt__date">{formatDate(order.createdAt)}</p>
+
+        {customerName && (
+          <p className="receipt__served">Ordered by: {customerName}</p>
+        )}
+
+        <div className="receipt__divider" />
+
+        <div className="receipt__line">
+          <span>
+            {order.serviceName} x{order.quantity || 1}
+          </span>
+          <span>
+            {order.totalPrice != null
+              ? `₱${Number(order.totalPrice).toFixed(2)}`
+              : "—"}
+          </span>
+        </div>
+
+        {order.description && (
+          <p className="receipt__desc">{order.description}</p>
+        )}
+
+        <div className="receipt__divider" />
+
+        <p className="receipt__total">
+          TOTAL: {order.totalPrice != null ? `₱${Number(order.totalPrice).toFixed(2)}` : "—"}
+        </p>
+
+        <div className="receipt__reference-box">
+          <span className="receipt__reference-label">Reference / Tracking No.</span>
+          <span className="receipt__reference-value">{order.referenceId}</span>
+          <span className="receipt__reference-hint">
+            Show this at pickup to claim your order.
+          </span>
+        </div>
+
+        <p className="receipt__thanks">Thank you for your business!</p>
+
+        <button type="button" className="login-btn receipt__done-btn" onClick={onClose}>
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OrderHistory({ uid, customerName }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState(null);
 
   useEffect(() => {
     if (uid) loadOrders();
@@ -535,13 +651,25 @@ function OrderHistory({ uid }) {
       ) : (
         <div className="order-history">
           {orders.map((order) => (
-            <div key={order.id} className="order-card">
+            <div
+              key={order.id}
+              className="order-card order-card--clickable"
+              onClick={() => setSelectedOrder(order)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") setSelectedOrder(order);
+              }}
+            >
               <div className="order-card__top">
                 <span className="order-card__service">{order.serviceName || "Service"}</span>
                 <span className={`order-status order-status--${order.status || "placed"}`}>
                   {statusLabel(order.status)}
                 </span>
               </div>
+              {order.referenceId && (
+                <div className="order-card__ref">Ref: {order.referenceId}</div>
+              )}
               {order.description && (
                 <p className="order-card__desc">{order.description}</p>
               )}
@@ -568,6 +696,7 @@ function OrderHistory({ uid }) {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="order-card__file-link"
+                      onClick={(e) => e.stopPropagation()}
                     >
                       📎 {f.name}
                     </a>
@@ -577,6 +706,14 @@ function OrderHistory({ uid }) {
             </div>
           ))}
         </div>
+      )}
+
+      {selectedOrder && (
+        <Receipt
+          order={selectedOrder}
+          customerName={customerName}
+          onClose={() => setSelectedOrder(null)}
+        />
       )}
     </div>
   );

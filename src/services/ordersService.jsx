@@ -18,7 +18,7 @@ import { db } from "../firebase-config";
 
 // From your Cloudinary dashboard (Settings → Upload → Upload presets).
 // Cloud name is shown on your dashboard home page.
-const CLOUDINARY_CLOUD_NAME = "YOUR_CLOUD_NAME";
+const CLOUDINARY_CLOUD_NAME = "Perez Orders";
 const CLOUDINARY_UPLOAD_PRESET = "YOUR_UNSIGNED_UPLOAD_PRESET";
 
 /**
@@ -53,17 +53,33 @@ export async function uploadOrderFiles(uid, files) {
 }
 
 /**
+ * Generates a short, human-readable reference/tracking number,
+ * e.g. "PPS-20260903-7F2K", used for order pickup lookup.
+ * @returns {string}
+ */
+function generateReferenceId() {
+  const now = new Date();
+  const datePart = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(
+    now.getDate()
+  ).padStart(2, "0")}`;
+  const randomPart = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `PPS-${datePart}-${randomPart}`;
+}
+
+/**
  * Creates a new order.
  * @param {object} data - e.g. { customerId, customerEmail, serviceId, serviceName, description, files }
- * @returns {Promise<string>} the new order's id
+ * @returns {Promise<{ id: string, referenceId: string }>} the new order's id and tracking reference
  */
 export async function createOrder(data) {
+  const referenceId = generateReferenceId();
   const docRef = await addDoc(collection(db, "orders"), {
     ...data,
+    referenceId,
     status: "placed",
     createdAt: serverTimestamp(),
   });
-  return docRef.id;
+  return { id: docRef.id, referenceId };
 }
 
 /**
