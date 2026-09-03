@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getAllServices } from "../services/servicesService";
+import { uploadOrderFiles, createOrder, getUserOrders } from "../services/ordersService";
 import "./CustomerDashboard.css";
 
 export default function CustomerDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [view, setView] = useState("dashboard"); // "dashboard" | "services"
+  const [view, setView] = useState("dashboard"); // "dashboard" | "services" | "orders" | ...
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
 
@@ -177,9 +178,7 @@ export default function CustomerDashboard() {
                   ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1)
                   : "Customer"}
               </span>
-              {user?.email && (
-                <span className="user-email">{user.email}</span>
-              )}
+              {user?.email && <span className="user-email">{user.email}</span>}
             </div>
           </div>
 
@@ -207,9 +206,17 @@ export default function CustomerDashboard() {
           </div>
         )}
 
-        {view === "services" && <ServicesBrowser />}
+        {view === "services" && (
+          <ServicesBrowser
+            uid={user?.uid}
+            email={user?.email}
+            onOrderPlaced={() => setView("orders")}
+          />
+        )}
 
-        {view !== "dashboard" && view !== "services" && (
+        {view === "orders" && <OrderHistory uid={user?.uid} />}
+
+        {view !== "dashboard" && view !== "services" && view !== "orders" && (
           <div className="dashboard-content dashboard-content--empty">
             Coming soon.
           </div>
@@ -219,10 +226,11 @@ export default function CustomerDashboard() {
   );
 }
 
-function ServicesBrowser() {
+function ServicesBrowser({ uid, email, onOrderPlaced }) {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedService, setSelectedService] = useState(null);
 
   useEffect(() => {
     loadServices();
@@ -256,7 +264,12 @@ function ServicesBrowser() {
       ) : (
         <div className="svc-browse-grid">
           {services.map((svc) => (
-            <div key={svc.id} className="svc-card">
+            <button
+              key={svc.id}
+              type="button"
+              className="svc-card svc-card--clickable"
+              onClick={() => setSelectedService(svc)}
+            >
               <h3 className="svc-card__name">{svc.name}</h3>
               {svc.description && (
                 <p className="svc-card__desc">{svc.description}</p>
@@ -267,6 +280,300 @@ function ServicesBrowser() {
                 </span>
                 {svc.unit && <span className="svc-card__unit">{svc.unit}</span>}
               </div>
+              <span className="svc-card__cta">Order this service →</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {selectedService && (
+        <OrderModal
+          service={selectedService}
+          uid={uid}
+          email={email}
+          onClose={() => setSelectedService(null)}
+          onSubmitted={() => {
+            setSelectedService(null);
+            if (onOrderPlaced) onOrderPlaced();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function OrderModal({ service, uid, email, onClose, onSubmitted }) {
+  const [description, setDescription] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const [files, setFiles] = useState([]);
+  const [descriptionError, setDescriptionError] = useState("");
+  const [quantityError, setQuantityError] = useState("");
+  const [status, setStatus] = useState({ text: "", type: "" });
+  const [submitting, setSubmitting] = useState(false);
+  const [uploadNote, setUploadNote] = useState("");
+
+  function handleFileChange(e) {
+    const selected = Array.from(e.target.files || []);
+    setFiles((prev) => [...prev, ...selected]);
+    e.target.value = "";
+  }
+
+  function removeFile(index) {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  const total = service.price != null ? Number(service.price) * Number(quantity || 0) : null;
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setDescriptionError("");
+    setQuantityError("");
+    setStatus({ text: "", type: "" });
+
+    let valid = true;
+    if (!description.trim()) {
+      setDescriptionError("Please describe your order or add specifications.");
+      valid = false;
+    }
+    if (!quantity || Number(quantity) < 1) {
+      setQuantityError("Enter a quantity of at least 1.");
+      valid = false;
+    }
+    if (!valid) return;
+
+    setSubmitting(true);
+    setUploadNote("");
+    try {
+      let uploadedFiles = [];
+      if (files.length > 0) {
+        setUploadNote(`Uploading ${files.length} file${files.length > 1 ? "s" : ""}...`);
+        uploadedFiles = await uploadOrderFiles(uid, files);
+      }
+
+      await createOrder({
+        customerId: uid,
+        customerEmail: email || "",
+        serviceId: service.id,
+        serviceName: service.name || "",
+        description: description.trim(),
+        quantity: Number(quantity),
+        unit: service.unit || "",
+        unitPrice: service.price != null ? Number(service.price) : null,
+        totalPrice: total,
+        files: uploadedFiles,
+      });
+
+      setStatus({ text: "Order submitted successfully.", type: "success" });
+      setTimeout(() => {
+        onSubmitted();
+      }, 700);
+    } catch (err) {
+      setStatus({ text: "Failed to submit order. Please try again.", type: "error" });
+    } finally {
+      setSubmitting(false);
+      setUploadNote("");
+    }
+  }
+
+  return (
+    <div className="order-modal-overlay" onClick={onClose}>
+      <div className="order-modal" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="order-modal__close"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          ✕
+        </button>
+
+        <h3 className="order-modal__title">Order: {service.name}</h3>
+        {service.description && (
+          <p className="order-modal__service-desc">{service.description}</p>
+        )}
+        <div className="order-modal__price">
+          {service.price != null ? `₱${Number(service.price).toFixed(2)}` : "Contact for pricing"}
+          {service.unit && <span className="order-modal__unit"> · {service.unit}</span>}
+        </div>
+
+        <form onSubmit={handleSubmit} className="order-form order-form--modal">
+          <label className="field-label" htmlFor="modalDescription">
+            Specifications / Description
+          </label>
+          <textarea
+            id="modalDescription"
+            className="order-textarea"
+            placeholder="e.g. 500 pieces, matte finish, double-sided, my logo attached"
+            rows={4}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+          <div className="field-error">{descriptionError}</div>
+
+          <label className="field-label" htmlFor="modalQuantity">Quantity</label>
+          <input
+            id="modalQuantity"
+            type="number"
+            min="1"
+            step="1"
+            className="order-select"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+          />
+          <div className="field-error">{quantityError}</div>
+
+          {service.price != null && (
+            <div className="order-modal__total">
+              <span>Total</span>
+              <span className="order-modal__total-amount">
+                ₱{total.toFixed(2)}
+              </span>
+            </div>
+          )}
+
+          <label className="field-label">Attach Files</label>
+          <label className="order-file-drop" htmlFor="modalFiles">
+            <svg viewBox="0 0 24 24" width="22" height="22">
+              <path
+                fill="currentColor"
+                d="M12 3 7 8h3v6h4V8h3l-5-5Zm-7 14v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2h-2v2H7v-2H5Z"
+              />
+            </svg>
+            <span>Click to attach files or drag them here</span>
+            <input
+              id="modalFiles"
+              type="file"
+              multiple
+              onChange={handleFileChange}
+              style={{ display: "none" }}
+            />
+          </label>
+
+          {files.length > 0 && (
+            <ul className="order-file-list">
+              {files.map((file, i) => (
+                <li key={`${file.name}-${i}`} className="order-file-item">
+                  <span className="order-file-name">{file.name}</span>
+                  <span className="order-file-size">{formatFileSize(file.size)}</span>
+                  <button
+                    type="button"
+                    className="order-file-remove"
+                    onClick={() => removeFile(i)}
+                    aria-label={`Remove ${file.name}`}
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <button type="submit" className="login-btn order-submit-btn" disabled={submitting}>
+            {submitting ? uploadNote || "Submitting..." : "Submit Order"}
+          </button>
+
+          {status.text && (
+            <div className={`status ${status.type}`}>{status.text}</div>
+          )}
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function OrderHistory({ uid }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (uid) loadOrders();
+  }, [uid]);
+
+  async function loadOrders() {
+    setLoading(true);
+    try {
+      const userOrders = await getUserOrders(uid);
+      setOrders(userOrders);
+    } catch (err) {
+      // Non-fatal
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function statusLabel(s) {
+    switch (s) {
+      case "placed":
+        return "Placed";
+      case "printing":
+        return "Printing";
+      case "ready":
+        return "Ready for Pickup";
+      case "completed":
+        return "Completed";
+      default:
+        return s || "Placed";
+    }
+  }
+
+  if (loading) {
+    return <div className="dashboard-content">Loading your orders...</div>;
+  }
+
+  return (
+    <div className="dashboard-content">
+      {orders.length === 0 ? (
+        <div className="um-empty">
+          You haven't placed any orders yet. Browse Services to get started.
+        </div>
+      ) : (
+        <div className="order-history">
+          {orders.map((order) => (
+            <div key={order.id} className="order-card">
+              <div className="order-card__top">
+                <span className="order-card__service">{order.serviceName || "Service"}</span>
+                <span className={`order-status order-status--${order.status || "placed"}`}>
+                  {statusLabel(order.status)}
+                </span>
+              </div>
+              {order.description && (
+                <p className="order-card__desc">{order.description}</p>
+              )}
+              {(order.quantity || order.totalPrice != null) && (
+                <div className="order-card__meta">
+                  {order.quantity && (
+                    <span>
+                      Qty: {order.quantity} {order.unit || ""}
+                    </span>
+                  )}
+                  {order.totalPrice != null && (
+                    <span className="order-card__total">
+                      Total: ₱{Number(order.totalPrice).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              )}
+              {order.files?.length > 0 && (
+                <div className="order-card__files">
+                  {order.files.map((f, i) => (
+                    <a
+                      key={i}
+                      href={f.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="order-card__file-link"
+                    >
+                      📎 {f.name}
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -820,6 +820,21 @@ function OrderManagement() {
                 <p className="ord-card__desc">{order.description}</p>
               )}
 
+              {(order.quantity || order.totalPrice != null) && (
+                <div className="ord-card__meta">
+                  {order.quantity && (
+                    <span>
+                      Qty: {order.quantity} {order.unit || ""}
+                    </span>
+                  )}
+                  {order.totalPrice != null && (
+                    <span className="ord-card__total">
+                      Total: ₱{Number(order.totalPrice).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              )}
+
               {order.files?.length > 0 && (
                 <div className="ord-card__files">
                   {order.files.map((f, i) => (
