@@ -215,7 +215,6 @@ function UserManagement({ currentUid }) {
   const [page, setPage] = useState(1);
 
   const [savingId, setSavingId] = useState(null);
-  const [showAddInfo, setShowAddInfo] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -289,7 +288,6 @@ function UserManagement({ currentUid }) {
         <div className="um-search">
           <svg viewBox="0 0 24 24" width="16" height="16">
             <path
-              fill="currentColor"
               d="m21 21-4.3-4.3m2.3-5.2a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z"
               stroke="currentColor"
               strokeWidth="2"
@@ -335,27 +333,6 @@ function UserManagement({ currentUid }) {
             <option value={12}>12</option>
             <option value={24}>24</option>
           </select>
-        </div>
-
-        <div className="um-add-user-wrap">
-          <button
-            type="button"
-            className="um-add-user-btn"
-            onClick={() => setShowAddInfo((v) => !v)}
-          >
-            <svg viewBox="0 0 24 24" width="15" height="15">
-              <path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z" />
-            </svg>
-            Add User
-          </button>
-          {showAddInfo && (
-            <div className="um-add-user-popup">
-              New accounts are created by users themselves through the Sign
-              Up page — there's no manual "add user" here. Once someone
-              registers, you can find them in this list and change their
-              role.
-            </div>
-          )}
         </div>
       </div>
 
@@ -446,19 +423,7 @@ function ServicesManagement() {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  // New service form
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [price, setPrice] = useState("");
-  const [unit, setUnit] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [formError, setFormError] = useState("");
-
-  // Per-row edit state
-  const [editingId, setEditingId] = useState(null);
-  const [editValues, setEditValues] = useState({});
-  const [savingId, setSavingId] = useState(null);
+  const [modalService, setModalService] = useState(null); // null = closed, {} = add, {...} = edit
   const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
@@ -478,81 +443,6 @@ function ServicesManagement() {
     }
   }
 
-  async function handleAddService(e) {
-    e.preventDefault();
-    setFormError("");
-
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      setFormError("Service name is required.");
-      return;
-    }
-    if (price && isNaN(Number(price))) {
-      setFormError("Price must be a number.");
-      return;
-    }
-
-    setAdding(true);
-    try {
-      const newId = await addService({
-        name: trimmedName,
-        description: description.trim(),
-        price: price ? Number(price) : null,
-        unit: unit.trim(),
-      });
-      setServices((prev) => [
-        ...prev,
-        { id: newId, name: trimmedName, description: description.trim(), price: price ? Number(price) : null, unit: unit.trim() },
-      ]);
-      setName("");
-      setDescription("");
-      setPrice("");
-      setUnit("");
-    } catch (err) {
-      setFormError("Failed to add service. Please try again.");
-    } finally {
-      setAdding(false);
-    }
-  }
-
-  function startEdit(svc) {
-    setEditingId(svc.id);
-    setEditValues({
-      name: svc.name || "",
-      description: svc.description || "",
-      price: svc.price ?? "",
-      unit: svc.unit || "",
-    });
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
-    setEditValues({});
-  }
-
-  async function saveEdit(id) {
-    if (!editValues.name?.trim()) return;
-
-    setSavingId(id);
-    try {
-      const updated = {
-        name: editValues.name.trim(),
-        description: (editValues.description || "").trim(),
-        price: editValues.price === "" ? null : Number(editValues.price),
-        unit: (editValues.unit || "").trim(),
-      };
-      await updateService(id, updated);
-      setServices((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, ...updated } : s))
-      );
-      setEditingId(null);
-    } catch (err) {
-      setError("Failed to update service. Please try again.");
-    } finally {
-      setSavingId(null);
-    }
-  }
-
   async function handleDelete(id) {
     setDeletingId(id);
     try {
@@ -565,6 +455,15 @@ function ServicesManagement() {
     }
   }
 
+  function handleSaved(saved, isNew) {
+    if (isNew) {
+      setServices((prev) => [...prev, saved]);
+    } else {
+      setServices((prev) => prev.map((s) => (s.id === saved.id ? saved : s)));
+    }
+    setModalService(null);
+  }
+
   if (loading) {
     return <div className="dashboard-content">Loading services...</div>;
   }
@@ -573,45 +472,18 @@ function ServicesManagement() {
     <div className="dashboard-content">
       {error && <div className="um-error">{error}</div>}
 
-      {/* Add new service form */}
-      <form className="svc-form" onSubmit={handleAddService}>
-        <div className="svc-form__row">
-          <input
-            type="text"
-            placeholder="Service name (e.g. Business Cards)"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="svc-input svc-input--name"
-          />
-          <input
-            type="text"
-            placeholder="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="svc-input svc-input--desc"
-          />
-          <input
-            type="number"
-            placeholder="Price"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            className="svc-input svc-input--price"
-            min="0"
-            step="0.01"
-          />
-          <input
-            type="text"
-            placeholder="Unit (e.g. per piece)"
-            value={unit}
-            onChange={(e) => setUnit(e.target.value)}
-            className="svc-input svc-input--unit"
-          />
-          <button type="submit" className="svc-add-btn" disabled={adding}>
-            {adding ? "Adding..." : "+ Add Service"}
-          </button>
-        </div>
-        {formError && <div className="field-error">{formError}</div>}
-      </form>
+      <div className="svc-toolbar">
+        <button
+          type="button"
+          className="svc-add-btn"
+          onClick={() => setModalService({})}
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15">
+            <path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z" />
+          </svg>
+          Add Service
+        </button>
+      </div>
 
       {/* Services table */}
       <div className="um-table-wrap">
@@ -619,102 +491,284 @@ function ServicesManagement() {
           <thead>
             <tr>
               <th>Name</th>
+              <th>Category</th>
               <th>Description</th>
-              <th>Price</th>
+              <th>Base Price</th>
               <th>Unit</th>
+              <th>Varieties (price)</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {services.map((svc) => {
-              const isEditing = editingId === svc.id;
-              return (
-                <tr key={svc.id}>
-                  {isEditing ? (
-                    <>
-                      <td>
-                        <input
-                          className="svc-edit-input"
-                          value={editValues.name}
-                          onChange={(e) =>
-                            setEditValues((v) => ({ ...v, name: e.target.value }))
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="svc-edit-input"
-                          value={editValues.description}
-                          onChange={(e) =>
-                            setEditValues((v) => ({ ...v, description: e.target.value }))
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="svc-edit-input svc-edit-input--price"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={editValues.price}
-                          onChange={(e) =>
-                            setEditValues((v) => ({ ...v, price: e.target.value }))
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="svc-edit-input"
-                          value={editValues.unit}
-                          onChange={(e) =>
-                            setEditValues((v) => ({ ...v, unit: e.target.value }))
-                          }
-                        />
-                      </td>
-                      <td className="svc-actions">
-                        <button
-                          className="um-save-btn"
-                          onClick={() => saveEdit(svc.id)}
-                          disabled={savingId === svc.id}
-                        >
-                          {savingId === svc.id ? "Saving..." : "Save"}
-                        </button>
-                        <button className="svc-cancel-btn" onClick={cancelEdit}>
-                          Cancel
-                        </button>
-                      </td>
-                    </>
+            {services.map((svc) => (
+              <tr key={svc.id}>
+                <td>{svc.name}</td>
+                <td className="um-muted">{svc.category || "—"}</td>
+                <td className="um-muted">{svc.description || "—"}</td>
+                <td className="um-muted">
+                  {svc.price != null ? `₱${Number(svc.price).toFixed(2)}` : "—"}
+                </td>
+                <td className="um-muted">{svc.unit || "—"}</td>
+                <td className="um-muted">
+                  {svc.varieties?.length > 0 ? (
+                    <div className="svc-variety-tags">
+                      {svc.varieties.map((v, i) => (
+                        <span key={i} className="svc-variety-tag">
+                          {v.name}
+                          {v.price != null ? ` · ₱${Number(v.price).toFixed(2)}` : ""}
+                        </span>
+                      ))}
+                    </div>
                   ) : (
-                    <>
-                      <td>{svc.name}</td>
-                      <td className="um-muted">{svc.description || "—"}</td>
-                      <td className="um-muted">
-                        {svc.price != null ? `₱${svc.price.toFixed(2)}` : "—"}
-                      </td>
-                      <td className="um-muted">{svc.unit || "—"}</td>
-                      <td className="svc-actions">
-                        <button className="svc-edit-btn" onClick={() => startEdit(svc)}>
-                          Edit
-                        </button>
-                        <button
-                          className="svc-delete-btn"
-                          onClick={() => handleDelete(svc.id)}
-                          disabled={deletingId === svc.id}
-                        >
-                          {deletingId === svc.id ? "Deleting..." : "Delete"}
-                        </button>
-                      </td>
-                    </>
+                    "—"
                   )}
-                </tr>
-              );
-            })}
+                </td>
+                <td className="svc-actions">
+                  <button className="svc-edit-btn" onClick={() => setModalService(svc)}>
+                    Edit
+                  </button>
+                  <button
+                    className="svc-delete-btn"
+                    onClick={() => handleDelete(svc.id)}
+                    disabled={deletingId === svc.id}
+                  >
+                    {deletingId === svc.id ? "Deleting..." : "Delete"}
+                  </button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
 
         {services.length === 0 && (
           <div className="um-empty">No services added yet.</div>
         )}
+      </div>
+
+      {modalService && (
+        <ServiceModal
+          initialService={Object.keys(modalService).length ? modalService : null}
+          onClose={() => setModalService(null)}
+          onSaved={handleSaved}
+        />
+      )}
+    </div>
+  );
+}
+
+function ServiceModal({ initialService, onClose, onSaved }) {
+  const isEdit = !!initialService;
+
+  const [name, setName] = useState(initialService?.name || "");
+  const [category, setCategory] = useState(initialService?.category || "");
+  const [description, setDescription] = useState(initialService?.description || "");
+  const [price, setPrice] = useState(
+    initialService?.price != null ? String(initialService.price) : ""
+  );
+  const [unit, setUnit] = useState(initialService?.unit || "");
+  const [varieties, setVarieties] = useState(initialService?.varieties || []);
+  const [varietyName, setVarietyName] = useState("");
+  const [varietyPrice, setVarietyPrice] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  function addVariety() {
+    const trimmedName = varietyName.trim();
+    if (!trimmedName) return;
+    if (varietyPrice && isNaN(Number(varietyPrice))) {
+      setFormError("Variety price must be a number.");
+      return;
+    }
+    setFormError("");
+    setVarieties((prev) => [
+      ...prev,
+      { name: trimmedName, price: varietyPrice ? Number(varietyPrice) : null },
+    ]);
+    setVarietyName("");
+    setVarietyPrice("");
+  }
+
+  function removeVariety(index) {
+    setVarieties((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setFormError("");
+
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setFormError("Service name is required.");
+      return;
+    }
+    if (price && isNaN(Number(price))) {
+      setFormError("Base price must be a number.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const data = {
+        name: trimmedName,
+        category: category.trim(),
+        description: description.trim(),
+        price: price ? Number(price) : null,
+        unit: unit.trim(),
+        varieties,
+      };
+
+      if (isEdit) {
+        await updateService(initialService.id, data);
+        onSaved({ id: initialService.id, ...data }, false);
+      } else {
+        const newId = await addService(data);
+        onSaved({ id: newId, ...data }, true);
+      }
+    } catch (err) {
+      setFormError("Failed to save service. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="order-modal-overlay" onClick={onClose}>
+      <div className="order-modal" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="order-modal__close"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          ✕
+        </button>
+
+        <h3 className="order-modal__title">
+          {isEdit ? "Edit Service" : "Add New Service"}
+        </h3>
+
+        <form onSubmit={handleSubmit} className="order-form order-form--modal">
+          <label className="field-label" htmlFor="svcName">Service Name</label>
+          <input
+            id="svcName"
+            type="text"
+            className="order-select"
+            placeholder="e.g. Business Cards"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+
+          <label className="field-label" htmlFor="svcCategory">Category</label>
+          <input
+            id="svcCategory"
+            type="text"
+            className="order-select"
+            placeholder="e.g. Cards, Apparel, Signage"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          />
+
+          <label className="field-label" htmlFor="svcDescription">Description</label>
+          <textarea
+            id="svcDescription"
+            className="order-textarea"
+            placeholder="Short description of this service"
+            rows={3}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+
+          <div className="svc-form__row--split">
+            <div className="svc-form__col">
+              <label className="field-label" htmlFor="svcPrice">
+                Base Price <span className="field-label__hint">(optional)</span>
+              </label>
+              <input
+                id="svcPrice"
+                type="number"
+                min="0"
+                step="0.01"
+                className="order-select"
+                placeholder="e.g. 250"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+              />
+            </div>
+            <div className="svc-form__col">
+              <label className="field-label" htmlFor="svcUnit">Unit</label>
+              <input
+                id="svcUnit"
+                type="text"
+                className="order-select"
+                placeholder="e.g. per piece"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <label className="field-label">
+            Varieties <span className="field-label__hint">(each with its own price)</span>
+          </label>
+          <div className="svc-variety-input-row">
+            <input
+              type="text"
+              className="order-select"
+              placeholder="Variety name (e.g. Small)"
+              value={varietyName}
+              onChange={(e) => setVarietyName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addVariety();
+                }
+              }}
+            />
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              className="order-select svc-variety-price-input"
+              placeholder="Price"
+              value={varietyPrice}
+              onChange={(e) => setVarietyPrice(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addVariety();
+                }
+              }}
+            />
+            <button type="button" className="svc-variety-add-btn" onClick={addVariety}>
+              Add
+            </button>
+          </div>
+
+          {varieties.length > 0 && (
+            <div className="svc-variety-tags svc-variety-tags--editable">
+              {varieties.map((v, i) => (
+                <span key={i} className="svc-variety-tag">
+                  {v.name}
+                  {v.price != null ? ` · ₱${Number(v.price).toFixed(2)}` : ""}
+                  <button
+                    type="button"
+                    className="svc-variety-remove"
+                    onClick={() => removeVariety(i)}
+                    aria-label={`Remove ${v.name}`}
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="field-error">{formError}</div>
+
+          <button type="submit" className="login-btn order-submit-btn" disabled={saving}>
+            {saving ? "Saving..." : isEdit ? "Save Changes" : "Add Service"}
+          </button>
+        </form>
       </div>
     </div>
   );

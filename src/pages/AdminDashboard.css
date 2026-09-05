@@ -987,3 +987,235 @@
   background: #e6f0ff;
   color: #1d5fd6;
 }
+
+/* ---------- Services toolbar ---------- */
+
+.svc-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+/* ---------- Variety tags ---------- */
+
+.svc-variety-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.svc-variety-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eef1f5;
+  color: var(--text-dark);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 999px;
+}
+
+.svc-variety-tags--editable .svc-variety-tag {
+  background: #fff4e6;
+  color: #b0670e;
+}
+
+.svc-variety-remove {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.svc-variety-remove:hover {
+  opacity: 1;
+}
+
+.svc-variety-input-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.svc-variety-input-row .order-select {
+  flex: 1;
+}
+
+.svc-variety-price-input {
+  flex: 0 0 100px !important;
+}
+
+.svc-variety-add-btn {
+  background: var(--navy);
+  color: var(--white);
+  border: none;
+  border-radius: 8px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.svc-variety-add-btn:hover {
+  background: var(--navy-dark);
+}
+
+.field-label__hint {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+/* ---------- Modal fields (shared with Add Service form) ---------- */
+
+.field-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin: 4px 2px 6px;
+}
+
+.field-error {
+  color: #e5484d;
+  font-size: 12px;
+  min-height: 16px;
+  margin: 2px 2px 10px;
+}
+
+.order-select,
+.order-textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  color: var(--text-dark);
+  outline: none;
+  transition: border-color 0.15s ease;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.order-select:focus,
+.order-textarea:focus {
+  border-color: var(--orange);
+}
+
+.order-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.order-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.order-form--modal {
+  margin: 0;
+}
+
+.order-submit-btn {
+  margin-top: 6px;
+  width: 100%;
+}
+
+.svc-form__row--split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.svc-form__col {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- Modal shell ---------- */
+
+.order-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 18, 26, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.order-modal {
+  background: var(--white);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 26px 26px 24px;
+  position: relative;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+.order-modal__close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: #f5f6f8;
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.order-modal__close:hover {
+  background: #e9ebef;
+  color: var(--text-dark);
+}
+
+.order-modal__title {
+  margin: 0 6px 18px 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-dark);
+  padding-right: 24px;
+}
+
+/* ---------- Base button/status (needed for the modal) ---------- */
+
+.login-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--navy);
+  color: var(--white);
+  border: none;
+  border-radius: 8px;
+  padding: 11px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.login-btn:hover:not(:disabled) {
+  background: var(--navy-dark);
+}
+
+.login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
