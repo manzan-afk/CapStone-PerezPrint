@@ -18,8 +18,8 @@ import { db } from "../firebase-config";
 
 // From your Cloudinary dashboard (Settings → Upload → Upload presets).
 // Cloud name is shown on your dashboard home page.
-const CLOUDINARY_CLOUD_NAME = "Perez Orders";
-const CLOUDINARY_UPLOAD_PRESET = "YOUR_UNSIGNED_UPLOAD_PRESET";
+const CLOUDINARY_CLOUD_NAME = "fl6yl7z7";
+const CLOUDINARY_UPLOAD_PRESET = "Perez Orders";
 
 /**
  * Uploads one or more files to Cloudinary and returns their names and
