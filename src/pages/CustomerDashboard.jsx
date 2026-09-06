@@ -244,7 +244,7 @@ function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedService, setSelectedService] = useState(null);
+  const [cartService, setCartService] = useState(null);
 
   useEffect(() => {
     loadServices();
@@ -277,38 +277,74 @@ function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
         </div>
       ) : (
         <div className="svc-browse-grid">
-          {services.map((svc) => (
-            <button
-              key={svc.id}
-              type="button"
-              className="svc-card svc-card--clickable"
-              onClick={() => setSelectedService(svc)}
-            >
-              <h3 className="svc-card__name">{svc.name}</h3>
-              {svc.description && (
-                <p className="svc-card__desc">{svc.description}</p>
-              )}
-              <div className="svc-card__footer">
-                <span className="svc-card__price">
-                  {svc.price != null ? `₱${Number(svc.price).toFixed(2)}` : "Contact for pricing"}
-                </span>
-                {svc.unit && <span className="svc-card__unit">{svc.unit}</span>}
-              </div>
-              <span className="svc-card__cta">Order this service →</span>
-            </button>
-          ))}
+          {services.map((svc) => {
+            const varietyPrices = (svc.varieties || [])
+              .map((v) => v.price)
+              .filter((p) => p != null);
+            const minPrice = varietyPrices.length ? Math.min(...varietyPrices) : null;
+            const maxPrice = varietyPrices.length ? Math.max(...varietyPrices) : null;
+
+            let priceDisplay;
+            if (minPrice != null) {
+              priceDisplay =
+                minPrice === maxPrice
+                  ? `₱${minPrice.toFixed(2)}`
+                  : `From ₱${minPrice.toFixed(2)}`;
+            } else if (svc.price != null) {
+              priceDisplay = `₱${Number(svc.price).toFixed(2)}`;
+            } else {
+              priceDisplay = "Contact for pricing";
+            }
+
+            return (
+              <button
+                key={svc.id}
+                type="button"
+                className="svc-card svc-card--clickable"
+                onClick={() => setCartService(svc)}
+              >
+                {svc.category && (
+                  <span className="svc-card__category">{svc.category}</span>
+                )}
+                <h3 className="svc-card__name">{svc.name}</h3>
+                {svc.description && (
+                  <p className="svc-card__desc">{svc.description}</p>
+                )}
+                {svc.varieties?.length > 0 && (
+                  <div className="svc-card__varieties">
+                    {svc.varieties.slice(0, 3).map((v, i) => (
+                      <span key={i} className="svc-card__variety-chip">
+                        {v.name}
+                      </span>
+                    ))}
+                    {svc.varieties.length > 3 && (
+                      <span className="svc-card__variety-chip svc-card__variety-chip--more">
+                        +{svc.varieties.length - 3} more
+                      </span>
+                    )}
+                  </div>
+                )}
+                <div className="svc-card__footer">
+                  <span className="svc-card__price">{priceDisplay}</span>
+                  {svc.unit && <span className="svc-card__unit">{svc.unit}</span>}
+                </div>
+                <span className="svc-card__cta">Order this service →</span>
+              </button>
+            );
+          })}
         </div>
       )}
 
-      {selectedService && (
-        <OrderModal
-          service={selectedService}
+      {cartService && (
+        <OrderCartModal
+          initialService={cartService}
+          allServices={services}
           uid={uid}
           email={email}
           customerName={customerName}
-          onClose={() => setSelectedService(null)}
+          onClose={() => setCartService(null)}
           onSubmitted={() => {
-            setSelectedService(null);
+            setCartService(null);
             if (onOrderPlaced) onOrderPlaced();
           }}
         />
@@ -317,16 +353,106 @@ function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
   );
 }
 
-function OrderModal({ service, uid, email, customerName, onClose, onSubmitted }) {
+// A "block" represents one service added to the cart, with either:
+// - a single quantity (service has no varieties), or
+// - one or more checked varieties, each with its own quantity.
+function makeBlock(service) {
+  return {
+    key: `${service.id}-${Date.now()}-${Math.random()}`,
+    service,
+    singleQuantity: 1,
+    checkedVarieties: {},
+  };
+}
+
+function blockLines(block) {
+  const { service, singleQuantity, checkedVarieties } = block;
+  if (!service.varieties?.length) {
+    const unitPrice = service.price != null ? Number(service.price) : null;
+    return [
+      {
+        serviceId: service.id,
+        serviceName: service.name,
+        varietyName: "",
+        quantity: Number(singleQuantity) || 0,
+        unitPrice,
+        lineTotal: unitPrice != null ? unitPrice * (Number(singleQuantity) || 0) : null,
+      },
+    ];
+  }
+
+  return Object.entries(checkedVarieties).map(([idx, qty]) => {
+    const variety = service.varieties[Number(idx)];
+    const unitPrice = variety.price != null ? Number(variety.price) : null;
+    return {
+      serviceId: service.id,
+      serviceName: service.name,
+      varietyName: variety.name,
+      quantity: Number(qty) || 0,
+      unitPrice,
+      lineTotal: unitPrice != null ? unitPrice * (Number(qty) || 0) : null,
+    };
+  });
+}
+
+function OrderCartModal({ initialService, allServices, uid, email, customerName, onClose, onSubmitted }) {
+  const [blocks, setBlocks] = useState([makeBlock(initialService)]);
+  const [addServiceId, setAddServiceId] = useState("");
   const [description, setDescription] = useState("");
-  const [quantity, setQuantity] = useState(1);
   const [files, setFiles] = useState([]);
   const [descriptionError, setDescriptionError] = useState("");
-  const [quantityError, setQuantityError] = useState("");
+  const [itemsError, setItemsError] = useState("");
   const [status, setStatus] = useState({ text: "", type: "" });
   const [submitting, setSubmitting] = useState(false);
   const [uploadNote, setUploadNote] = useState("");
   const [placedOrder, setPlacedOrder] = useState(null);
+
+  const usedServiceIds = new Set(blocks.map((b) => b.service.id));
+  const addableServices = allServices.filter((s) => !usedServiceIds.has(s.id));
+
+  const allLines = blocks.flatMap(blockLines).filter((l) => l.quantity > 0);
+  const grandTotal = allLines.some((l) => l.lineTotal == null)
+    ? null
+    : allLines.reduce((sum, l) => sum + (l.lineTotal || 0), 0);
+
+  function updateBlock(key, updater) {
+    setBlocks((prev) => prev.map((b) => (b.key === key ? updater(b) : b)));
+  }
+
+  function toggleVariety(key, index) {
+    updateBlock(key, (b) => {
+      const next = { ...b.checkedVarieties };
+      if (next[index] !== undefined) {
+        delete next[index];
+      } else {
+        next[index] = 1;
+      }
+      return { ...b, checkedVarieties: next };
+    });
+  }
+
+  function setVarietyQty(key, index, qty) {
+    updateBlock(key, (b) => ({
+      ...b,
+      checkedVarieties: { ...b.checkedVarieties, [index]: qty },
+    }));
+  }
+
+  function setSingleQty(key, qty) {
+    updateBlock(key, (b) => ({ ...b, singleQuantity: qty }));
+  }
+
+  function removeBlock(key) {
+    setBlocks((prev) => prev.filter((b) => b.key !== key));
+  }
+
+  function addAnotherService() {
+    if (!addServiceId) return;
+    const svc = allServices.find((s) => s.id === addServiceId);
+    if (!svc) return;
+    setBlocks((prev) => [...prev, makeBlock(svc)]);
+    setAddServiceId("");
+  }
 
   function handleFileChange(e) {
     const selected = Array.from(e.target.files || []);
@@ -344,21 +470,19 @@ function OrderModal({ service, uid, email, customerName, onClose, onSubmitted })
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  const total = service.price != null ? Number(service.price) * Number(quantity || 0) : null;
-
   async function handleSubmit(e) {
     e.preventDefault();
     setDescriptionError("");
-    setQuantityError("");
+    setItemsError("");
     setStatus({ text: "", type: "" });
 
     let valid = true;
-    if (!description.trim()) {
-      setDescriptionError("Please describe your order or add specifications.");
+    if (allLines.length === 0) {
+      setItemsError("Select at least one option and quantity.");
       valid = false;
     }
-    if (!quantity || Number(quantity) < 1) {
-      setQuantityError("Enter a quantity of at least 1.");
+    if (!description.trim()) {
+      setDescriptionError("Please describe your order or add specifications.");
       valid = false;
     }
     if (!valid) return;
@@ -375,21 +499,14 @@ function OrderModal({ service, uid, email, customerName, onClose, onSubmitted })
       const orderData = {
         customerId: uid,
         customerEmail: email || "",
-        serviceId: service.id,
-        serviceName: service.name || "",
+        items: allLines,
         description: description.trim(),
-        quantity: Number(quantity),
-        unit: service.unit || "",
-        unitPrice: service.price != null ? Number(service.price) : null,
-        totalPrice: total,
+        totalPrice: grandTotal,
         files: uploadedFiles,
       };
 
       const { id, referenceId } = await createOrder(orderData);
 
-      // Show the receipt instead of closing immediately — createdAt uses
-      // "now" locally since Firestore's serverTimestamp isn't available
-      // client-side until the write is confirmed and re-fetched.
       setPlacedOrder({
         id,
         referenceId,
@@ -397,7 +514,12 @@ function OrderModal({ service, uid, email, customerName, onClose, onSubmitted })
         createdAt: new Date(),
       });
     } catch (err) {
-      setStatus({ text: "Failed to submit order. Please try again.", type: "error" });
+      // TEMPORARY DEBUG — shows the real error so we can diagnose it.
+      console.log("ORDER SUBMIT ERROR:", err);
+      setStatus({
+        text: `Failed to submit order. (debug: ${err.code || err.message})`,
+        type: "error",
+      });
     } finally {
       setSubmitting(false);
       setUploadNote("");
@@ -409,9 +531,7 @@ function OrderModal({ service, uid, email, customerName, onClose, onSubmitted })
       <Receipt
         order={placedOrder}
         customerName={customerName}
-        onClose={() => {
-          onSubmitted();
-        }}
+        onClose={() => onSubmitted()}
       />
     );
   }
@@ -419,61 +539,124 @@ function OrderModal({ service, uid, email, customerName, onClose, onSubmitted })
   return (
     <div className="order-modal-overlay" onClick={onClose}>
       <div className="order-modal" onClick={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          className="order-modal__close"
-          onClick={onClose}
-          aria-label="Close"
-        >
+        <button type="button" className="order-modal__close" onClick={onClose} aria-label="Close">
           ✕
         </button>
 
-        <h3 className="order-modal__title">Order: {service.name}</h3>
-        {service.description && (
-          <p className="order-modal__service-desc">{service.description}</p>
-        )}
-        <div className="order-modal__price">
-          {service.price != null ? `₱${Number(service.price).toFixed(2)}` : "Contact for pricing"}
-          {service.unit && <span className="order-modal__unit"> · {service.unit}</span>}
-        </div>
+        <h3 className="order-modal__title">Build Your Order</h3>
 
         <form onSubmit={handleSubmit} className="order-form order-form--modal">
-          <label className="field-label" htmlFor="modalDescription">
+          {blocks.map((block, blockIndex) => (
+            <div key={block.key} className="cart-block">
+              <div className="cart-block__header">
+                <span className="cart-block__name">{block.service.name}</span>
+                {blockIndex > 0 && (
+                  <button
+                    type="button"
+                    className="cart-block__remove"
+                    onClick={() => removeBlock(block.key)}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+
+              {block.service.varieties?.length > 0 ? (
+                <div className="cart-variety-list">
+                  {block.service.varieties.map((v, i) => {
+                    const checked = block.checkedVarieties[i] !== undefined;
+                    return (
+                      <div key={i} className="cart-variety-row">
+                        <label className="cart-variety-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleVariety(block.key, i)}
+                          />
+                          <span>
+                            {v.name}
+                            {v.price != null ? ` — ₱${Number(v.price).toFixed(2)}` : ""}
+                          </span>
+                        </label>
+                        {checked && (
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            className="cart-variety-qty"
+                            value={block.checkedVarieties[i]}
+                            onChange={(e) => setVarietyQty(block.key, i, e.target.value)}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="cart-single-qty-row">
+                  <label className="field-label">Quantity</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    className="order-select"
+                    value={block.singleQuantity}
+                    onChange={(e) => setSingleQty(block.key, e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+
+          <div className="field-error">{itemsError}</div>
+
+          {addableServices.length > 0 && (
+            <div className="cart-add-service-row">
+              <select
+                className="order-select"
+                value={addServiceId}
+                onChange={(e) => setAddServiceId(e.target.value)}
+              >
+                <option value="">+ Add another service...</option>
+                {addableServices.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="svc-variety-add-btn"
+                onClick={addAnotherService}
+                disabled={!addServiceId}
+              >
+                Add
+              </button>
+            </div>
+          )}
+
+          {grandTotal != null && allLines.length > 0 && (
+            <div className="order-modal__total">
+              <span>Total ({allLines.length} item{allLines.length > 1 ? "s" : ""})</span>
+              <span className="order-modal__total-amount">₱{grandTotal.toFixed(2)}</span>
+            </div>
+          )}
+
+          <label className="field-label" htmlFor="cartDescription">
             Specifications / Description
           </label>
           <textarea
-            id="modalDescription"
+            id="cartDescription"
             className="order-textarea"
-            placeholder="e.g. 500 pieces, matte finish, double-sided, my logo attached"
+            placeholder="e.g. matte finish, double-sided, my logo attached"
             rows={4}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
           <div className="field-error">{descriptionError}</div>
 
-          <label className="field-label" htmlFor="modalQuantity">Quantity</label>
-          <input
-            id="modalQuantity"
-            type="number"
-            min="1"
-            step="1"
-            className="order-select"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-          />
-          <div className="field-error">{quantityError}</div>
-
-          {service.price != null && (
-            <div className="order-modal__total">
-              <span>Total</span>
-              <span className="order-modal__total-amount">
-                ₱{total.toFixed(2)}
-              </span>
-            </div>
-          )}
-
           <label className="field-label">Attach Files</label>
-          <label className="order-file-drop" htmlFor="modalFiles">
+          <label className="order-file-drop" htmlFor="cartFiles">
             <svg viewBox="0 0 24 24" width="22" height="22">
               <path
                 fill="currentColor"
@@ -482,7 +665,7 @@ function OrderModal({ service, uid, email, customerName, onClose, onSubmitted })
             </svg>
             <span>Click to attach files or drag them here</span>
             <input
-              id="modalFiles"
+              id="cartFiles"
               type="file"
               multiple
               onChange={handleFileChange}
@@ -522,7 +705,28 @@ function OrderModal({ service, uid, email, customerName, onClose, onSubmitted })
   );
 }
 
+// Normalizes an order into a flat list of line items, whether it uses the
+// current "items[]" shape or the older single-service fields, so display
+// components can handle both without branching everywhere.
+function getOrderLines(order) {
+  if (order.items?.length > 0) return order.items;
+  if (order.serviceName) {
+    return [
+      {
+        serviceName: order.serviceName,
+        varietyName: order.varietyName || "",
+        quantity: order.quantity || 1,
+        unitPrice: order.unitPrice ?? null,
+        lineTotal: order.totalPrice ?? null,
+      },
+    ];
+  }
+  return [];
+}
+
 function Receipt({ order, customerName, onClose }) {
+  const lines = getOrderLines(order);
+
   function formatDate(value) {
     const d = value?.toDate ? value.toDate() : value instanceof Date ? value : null;
     if (!d) return "—";
@@ -563,16 +767,17 @@ function Receipt({ order, customerName, onClose }) {
 
         <div className="receipt__divider" />
 
-        <div className="receipt__line">
-          <span>
-            {order.serviceName} x{order.quantity || 1}
-          </span>
-          <span>
-            {order.totalPrice != null
-              ? `₱${Number(order.totalPrice).toFixed(2)}`
-              : "—"}
-          </span>
-        </div>
+        {lines.map((line, i) => (
+          <div key={i} className="receipt__line">
+            <span>
+              {line.serviceName}
+              {line.varietyName ? ` (${line.varietyName})` : ""} x{line.quantity || 1}
+            </span>
+            <span>
+              {line.lineTotal != null ? `₱${Number(line.lineTotal).toFixed(2)}` : "—"}
+            </span>
+          </div>
+        ))}
 
         {order.description && (
           <p className="receipt__desc">{order.description}</p>
@@ -650,61 +855,66 @@ function OrderHistory({ uid, customerName }) {
         </div>
       ) : (
         <div className="order-history">
-          {orders.map((order) => (
-            <div
-              key={order.id}
-              className="order-card order-card--clickable"
-              onClick={() => setSelectedOrder(order)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") setSelectedOrder(order);
-              }}
-            >
-              <div className="order-card__top">
-                <span className="order-card__service">{order.serviceName || "Service"}</span>
-                <span className={`order-status order-status--${order.status || "placed"}`}>
-                  {statusLabel(order.status)}
-                </span>
-              </div>
-              {order.referenceId && (
-                <div className="order-card__ref">Ref: {order.referenceId}</div>
-              )}
-              {order.description && (
-                <p className="order-card__desc">{order.description}</p>
-              )}
-              {(order.quantity || order.totalPrice != null) && (
-                <div className="order-card__meta">
-                  {order.quantity && (
-                    <span>
-                      Qty: {order.quantity} {order.unit || ""}
-                    </span>
-                  )}
-                  {order.totalPrice != null && (
+          {orders.map((order) => {
+            const lines = getOrderLines(order);
+            const summary =
+              lines.length > 1
+                ? `${lines[0].serviceName} + ${lines.length - 1} more item${
+                    lines.length - 1 > 1 ? "s" : ""
+                  }`
+                : lines[0]
+                ? `${lines[0].serviceName}${lines[0].varietyName ? ` (${lines[0].varietyName})` : ""}`
+                : "Order";
+
+            return (
+              <div
+                key={order.id}
+                className="order-card order-card--clickable"
+                onClick={() => setSelectedOrder(order)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") setSelectedOrder(order);
+                }}
+              >
+                <div className="order-card__top">
+                  <span className="order-card__service">{summary}</span>
+                  <span className={`order-status order-status--${order.status || "placed"}`}>
+                    {statusLabel(order.status)}
+                  </span>
+                </div>
+                {order.referenceId && (
+                  <div className="order-card__ref">Ref: {order.referenceId}</div>
+                )}
+                {order.description && (
+                  <p className="order-card__desc">{order.description}</p>
+                )}
+                {order.totalPrice != null && (
+                  <div className="order-card__meta">
                     <span className="order-card__total">
                       Total: ₱{Number(order.totalPrice).toFixed(2)}
                     </span>
-                  )}
-                </div>
-              )}
-              {order.files?.length > 0 && (
-                <div className="order-card__files">
-                  {order.files.map((f, i) => (
-                    <a
-                      key={i}
-                      href={f.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="order-card__file-link"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      📎 {f.name}
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+                  </div>
+                )}
+                {order.files?.length > 0 && (
+                  <div className="order-card__files">
+                    {order.files.map((f, i) => (
+                      <a
+                        key={i}
+                        href={f.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="order-card__file-link"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        📎 {f.name}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
