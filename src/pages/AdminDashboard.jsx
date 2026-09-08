@@ -182,11 +182,7 @@ export default function AdminDashboard() {
           </h2>
         </header>
 
-        {view === "dashboard" && (
-          <div className="dashboard-content dashboard-content--empty">
-            {/* Intentionally blank — content coming later */}
-          </div>
-        )}
+        {view === "dashboard" && <DashboardOverview />}
 
         {view === "users" && <UserManagement currentUid={user?.uid} />}
 
@@ -203,6 +199,189 @@ const ROLE_BADGE_LABELS = {
   staff: "STAFF",
   customer: "CUSTOMER",
 };
+
+// Normalizes an order into its line items, whether it uses the current
+// "items[]" shape or the older single-service fields.
+function getOverviewOrderLines(order) {
+  if (order.items?.length > 0) return order.items;
+  if (order.serviceName) {
+    return [
+      {
+        serviceName: order.serviceName,
+        varietyName: order.varietyName || "",
+        quantity: order.quantity || 1,
+      },
+    ];
+  }
+  return [];
+}
+
+function DashboardOverview() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [users, setUsers] = useState([]);
+  const [services, setServices] = useState([]);
+  const [orders, setOrders] = useState([]);
+
+  useEffect(() => {
+    loadAll();
+  }, []);
+
+  async function loadAll() {
+    setLoading(true);
+    setError("");
+    try {
+      const [allUsers, allServices, allOrders] = await Promise.all([
+        getAllUsers(),
+        getAllServices(),
+        getAllOrders(),
+      ]);
+      setUsers(allUsers);
+      setServices(allServices);
+      setOrders(allOrders);
+    } catch (err) {
+      setError("Failed to load dashboard data. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="dashboard-content">Loading dashboard...</div>;
+  }
+
+  const customerCount = users.filter((u) => (u.role || "customer") === "customer").length;
+  const staffCount = users.filter((u) => u.role === "staff").length;
+  const adminCount = users.filter((u) => u.role === "admin").length;
+
+  const ordersByStatus = {
+    placed: orders.filter((o) => (o.status || "placed") === "placed").length,
+    printing: orders.filter((o) => o.status === "printing").length,
+    ready: orders.filter((o) => o.status === "ready").length,
+    completed: orders.filter((o) => o.status === "completed").length,
+  };
+
+  const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
+
+  const recentOrders = [...orders]
+    .sort((a, b) => {
+      const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+      const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+      return bTime - aTime;
+    })
+    .slice(0, 5);
+
+  function formatDate(ts) {
+    if (!ts?.toDate) return "—";
+    return ts.toDate().toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  return (
+    <div className="dashboard-content">
+      {error && <div className="um-error">{error}</div>}
+
+      {/* Stat cards */}
+      <div className="stat-grid">
+        <div className="stat-card">
+          <span className="stat-card__label">Total Users</span>
+          <span className="stat-card__value">{users.length}</span>
+          <span className="stat-card__sub">
+            {customerCount} customers · {staffCount} staff · {adminCount} admin
+          </span>
+        </div>
+
+        <div className="stat-card">
+          <span className="stat-card__label">Services Offered</span>
+          <span className="stat-card__value">{services.length}</span>
+          <span className="stat-card__sub">across all categories</span>
+        </div>
+
+        <div className="stat-card">
+          <span className="stat-card__label">Total Orders</span>
+          <span className="stat-card__value">{orders.length}</span>
+          <span className="stat-card__sub">
+            {ordersByStatus.placed} awaiting review
+          </span>
+        </div>
+
+        <div className="stat-card stat-card--accent">
+          <span className="stat-card__label">Total Revenue</span>
+          <span className="stat-card__value">₱{totalRevenue.toFixed(2)}</span>
+          <span className="stat-card__sub">across all orders</span>
+        </div>
+      </div>
+
+      {/* Order status breakdown */}
+      <div className="status-breakdown">
+        <div className="status-pill status-pill--placed">
+          <span className="status-pill__count">{ordersByStatus.placed}</span>
+          <span className="status-pill__label">Placed</span>
+        </div>
+        <div className="status-pill status-pill--printing">
+          <span className="status-pill__count">{ordersByStatus.printing}</span>
+          <span className="status-pill__label">Printing</span>
+        </div>
+        <div className="status-pill status-pill--ready">
+          <span className="status-pill__count">{ordersByStatus.ready}</span>
+          <span className="status-pill__label">Ready</span>
+        </div>
+        <div className="status-pill status-pill--completed">
+          <span className="status-pill__count">{ordersByStatus.completed}</span>
+          <span className="status-pill__label">Completed</span>
+        </div>
+      </div>
+
+      {/* Recent orders */}
+      <h3 className="dashboard-section__title">Recent Orders</h3>
+      {recentOrders.length === 0 ? (
+        <div className="um-empty">No orders yet.</div>
+      ) : (
+        <div className="um-table-wrap">
+          <table className="um-table">
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Service</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentOrders.map((order) => {
+                const lines = getOverviewOrderLines(order);
+                const summary =
+                  lines.length > 1
+                    ? `${lines[0].serviceName} + ${lines.length - 1} more`
+                    : lines[0]?.serviceName || "—";
+                return (
+                  <tr key={order.id}>
+                    <td className="um-muted">{order.customerEmail || "—"}</td>
+                    <td>{summary}</td>
+                    <td className="um-muted">
+                      {order.totalPrice != null ? `₱${Number(order.totalPrice).toFixed(2)}` : "—"}
+                    </td>
+                    <td>
+                      <span className={`order-status order-status--${order.status || "placed"}`}>
+                        {order.status
+                          ? order.status.charAt(0).toUpperCase() + order.status.slice(1)
+                          : "Placed"}
+                      </span>
+                    </td>
+                    <td className="um-muted">{formatDate(order.createdAt)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function UserManagement({ currentUid }) {
   const [users, setUsers] = useState([]);
@@ -556,6 +735,70 @@ function ServicesManagement() {
   );
 }
 
+// A simple removable-tag input for plain option lists (no price),
+// used for the print specification fields below (Paper Size, Paper
+// Type, Color, Printing Side, Binding).
+function TagListField({ label, hint, placeholder, values, onChange }) {
+  const [input, setInput] = useState("");
+
+  function add() {
+    const trimmed = input.trim();
+    if (!trimmed || values.includes(trimmed)) {
+      setInput("");
+      return;
+    }
+    onChange([...values, trimmed]);
+    setInput("");
+  }
+
+  function remove(v) {
+    onChange(values.filter((item) => item !== v));
+  }
+
+  return (
+    <div className="tag-field">
+      <label className="field-label">
+        {label} {hint && <span className="field-label__hint">({hint})</span>}
+      </label>
+      <div className="svc-variety-input-row">
+        <input
+          type="text"
+          className="order-select"
+          placeholder={placeholder}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+        />
+        <button type="button" className="svc-variety-add-btn" onClick={add}>
+          Add
+        </button>
+      </div>
+      {values.length > 0 && (
+        <div className="svc-variety-tags svc-variety-tags--editable">
+          {values.map((v) => (
+            <span key={v} className="svc-variety-tag">
+              {v}
+              <button
+                type="button"
+                className="svc-variety-remove"
+                onClick={() => remove(v)}
+                aria-label={`Remove ${v}`}
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ServiceModal({ initialService, onClose, onSaved }) {
   const isEdit = !!initialService;
 
@@ -569,6 +812,17 @@ function ServiceModal({ initialService, onClose, onSaved }) {
   const [varieties, setVarieties] = useState(initialService?.varieties || []);
   const [varietyName, setVarietyName] = useState("");
   const [varietyPrice, setVarietyPrice] = useState("");
+
+  // Print specification option groups
+  const [paperSizes, setPaperSizes] = useState(initialService?.paperSizes || []);
+  const [paperTypes, setPaperTypes] = useState(initialService?.paperTypes || []);
+  const [colorOptions, setColorOptions] = useState(initialService?.colorOptions || []);
+  const [printingSides, setPrintingSides] = useState(initialService?.printingSides || []);
+  const [bindingOptions, setBindingOptions] = useState(initialService?.bindingOptions || []);
+  const [specialInstructionsHint, setSpecialInstructionsHint] = useState(
+    initialService?.specialInstructionsHint || ""
+  );
+
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -615,6 +869,12 @@ function ServiceModal({ initialService, onClose, onSaved }) {
         price: price ? Number(price) : null,
         unit: unit.trim(),
         varieties,
+        paperSizes,
+        paperTypes,
+        colorOptions,
+        printingSides,
+        bindingOptions,
+        specialInstructionsHint: specialInstructionsHint.trim(),
       };
 
       if (isEdit) {
@@ -633,7 +893,7 @@ function ServiceModal({ initialService, onClose, onSaved }) {
 
   return (
     <div className="order-modal-overlay" onClick={onClose}>
-      <div className="order-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="order-modal service-modal" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           className="order-modal__close"
@@ -648,120 +908,184 @@ function ServiceModal({ initialService, onClose, onSaved }) {
         </h3>
 
         <form onSubmit={handleSubmit} className="order-form order-form--modal">
-          <label className="field-label" htmlFor="svcName">Service Name</label>
-          <input
-            id="svcName"
-            type="text"
-            className="order-select"
-            placeholder="e.g. Business Cards"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
+          {/* ---------- Basic Information ---------- */}
+          <div className="svc-modal-section">
+            <h4 className="svc-modal-section__title">Basic Information</h4>
 
-          <label className="field-label" htmlFor="svcCategory">Category</label>
-          <input
-            id="svcCategory"
-            type="text"
-            className="order-select"
-            placeholder="e.g. Cards, Apparel, Signage"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          />
+            <label className="field-label" htmlFor="svcName">Service Name</label>
+            <input
+              id="svcName"
+              type="text"
+              className="order-select"
+              placeholder="e.g. Document Printing"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
 
-          <label className="field-label" htmlFor="svcDescription">Description</label>
-          <textarea
-            id="svcDescription"
-            className="order-textarea"
-            placeholder="Short description of this service"
-            rows={3}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
+            <label className="field-label" htmlFor="svcCategory">Category</label>
+            <input
+              id="svcCategory"
+              type="text"
+              className="order-select"
+              placeholder="e.g. Documents, Cards, Apparel"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            />
 
-          <div className="svc-form__row--split">
-            <div className="svc-form__col">
-              <label className="field-label" htmlFor="svcPrice">
-                Base Price <span className="field-label__hint">(optional)</span>
-              </label>
+            <label className="field-label" htmlFor="svcDescription">Description</label>
+            <textarea
+              id="svcDescription"
+              className="order-textarea"
+              placeholder="Short description of this service"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+
+          {/* ---------- Pricing ---------- */}
+          <div className="svc-modal-section">
+            <h4 className="svc-modal-section__title">Pricing</h4>
+
+            <div className="svc-form__row--split">
+              <div className="svc-form__col">
+                <label className="field-label" htmlFor="svcPrice">
+                  Base Price <span className="field-label__hint">(optional)</span>
+                </label>
+                <input
+                  id="svcPrice"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="order-select"
+                  placeholder="e.g. 5"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                />
+              </div>
+              <div className="svc-form__col">
+                <label className="field-label" htmlFor="svcUnit">Unit</label>
+                <input
+                  id="svcUnit"
+                  type="text"
+                  className="order-select"
+                  placeholder="e.g. per page"
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <label className="field-label">
+              Varieties <span className="field-label__hint">(each with its own price)</span>
+            </label>
+            <div className="svc-variety-input-row">
               <input
-                id="svcPrice"
+                type="text"
+                className="order-select"
+                placeholder="Variety name (e.g. Rush Order)"
+                value={varietyName}
+                onChange={(e) => setVarietyName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addVariety();
+                  }
+                }}
+              />
+              <input
                 type="number"
                 min="0"
                 step="0.01"
-                className="order-select"
-                placeholder="e.g. 250"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
+                className="order-select svc-variety-price-input"
+                placeholder="Price"
+                value={varietyPrice}
+                onChange={(e) => setVarietyPrice(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addVariety();
+                  }
+                }}
               />
+              <button type="button" className="svc-variety-add-btn" onClick={addVariety}>
+                Add
+              </button>
             </div>
-            <div className="svc-form__col">
-              <label className="field-label" htmlFor="svcUnit">Unit</label>
-              <input
-                id="svcUnit"
-                type="text"
-                className="order-select"
-                placeholder="e.g. per piece"
-                value={unit}
-                onChange={(e) => setUnit(e.target.value)}
-              />
-            </div>
+            {varieties.length > 0 && (
+              <div className="svc-variety-tags svc-variety-tags--editable">
+                {varieties.map((v, i) => (
+                  <span key={i} className="svc-variety-tag">
+                    {v.name}
+                    {v.price != null ? ` · ₱${Number(v.price).toFixed(2)}` : ""}
+                    <button
+                      type="button"
+                      className="svc-variety-remove"
+                      onClick={() => removeVariety(i)}
+                      aria-label={`Remove ${v.name}`}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
-          <label className="field-label">
-            Varieties <span className="field-label__hint">(each with its own price)</span>
-          </label>
-          <div className="svc-variety-input-row">
+          {/* ---------- Print Specifications ---------- */}
+          <div className="svc-modal-section">
+            <h4 className="svc-modal-section__title">Print Specifications</h4>
+            <p className="svc-modal-section__hint">
+              Define the options a customer can choose from when ordering this
+              service. Leave a group empty if it doesn't apply.
+            </p>
+
+            <TagListField
+              label="Paper Size"
+              placeholder="e.g. A4"
+              values={paperSizes}
+              onChange={setPaperSizes}
+            />
+            <TagListField
+              label="Paper Type"
+              placeholder="e.g. Bond Paper"
+              values={paperTypes}
+              onChange={setPaperTypes}
+            />
+            <TagListField
+              label="Color"
+              placeholder="e.g. Colored"
+              values={colorOptions}
+              onChange={setColorOptions}
+            />
+            <TagListField
+              label="Printing Side"
+              placeholder="e.g. Single-sided"
+              values={printingSides}
+              onChange={setPrintingSides}
+            />
+            <TagListField
+              label="Binding"
+              placeholder="e.g. Stapled"
+              values={bindingOptions}
+              onChange={setBindingOptions}
+            />
+
+            <label className="field-label" htmlFor="svcInstructionsHint">
+              Special Instructions{" "}
+              <span className="field-label__hint">
+                (example placeholder shown to the customer)
+              </span>
+            </label>
             <input
+              id="svcInstructionsHint"
               type="text"
               className="order-select"
-              placeholder="Variety name (e.g. Small)"
-              value={varietyName}
-              onChange={(e) => setVarietyName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addVariety();
-                }
-              }}
+              placeholder="e.g. Staple upper-left"
+              value={specialInstructionsHint}
+              onChange={(e) => setSpecialInstructionsHint(e.target.value)}
             />
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              className="order-select svc-variety-price-input"
-              placeholder="Price"
-              value={varietyPrice}
-              onChange={(e) => setVarietyPrice(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addVariety();
-                }
-              }}
-            />
-            <button type="button" className="svc-variety-add-btn" onClick={addVariety}>
-              Add
-            </button>
           </div>
-
-          {varieties.length > 0 && (
-            <div className="svc-variety-tags svc-variety-tags--editable">
-              {varieties.map((v, i) => (
-                <span key={i} className="svc-variety-tag">
-                  {v.name}
-                  {v.price != null ? ` · ₱${Number(v.price).toFixed(2)}` : ""}
-                  <button
-                    type="button"
-                    className="svc-variety-remove"
-                    onClick={() => removeVariety(i)}
-                    aria-label={`Remove ${v.name}`}
-                  >
-                    ✕
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
 
           <div className="field-error">{formError}</div>
 

@@ -201,9 +201,21 @@ export default function CustomerDashboard() {
         </header>
 
         {view === "dashboard" && (
-          <div className="dashboard-content dashboard-content--empty">
-            {/* Intentionally blank — content coming later */}
-          </div>
+          <CustomerOverview
+            uid={user?.uid}
+            displayName={
+              profile?.firstName || profile?.lastName
+                ? `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim()
+                : user?.email || "Customer"
+            }
+            customerName={
+              profile?.firstName || profile?.lastName
+                ? `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim()
+                : user?.email || "Customer"
+            }
+            onGoToServices={() => setView("services")}
+            onGoToOrders={() => setView("orders")}
+          />
         )}
 
         {view === "services" && (
@@ -236,6 +248,177 @@ export default function CustomerDashboard() {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function CustomerOverview({ uid, displayName, customerName, onGoToServices, onGoToOrders }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selectedOrder, setSelectedOrder] = useState(null);
+
+  useEffect(() => {
+    if (uid) loadOrders();
+  }, [uid]);
+
+  async function loadOrders() {
+    setLoading(true);
+    setError("");
+    try {
+      const userOrders = await getUserOrders(uid);
+      setOrders(userOrders);
+    } catch (err) {
+      setError("Failed to load your orders.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function statusLabel(s) {
+    switch (s) {
+      case "placed":
+        return "Placed";
+      case "printing":
+        return "Printing";
+      case "ready":
+        return "Ready for Pickup";
+      case "completed":
+        return "Completed";
+      default:
+        return s || "Placed";
+    }
+  }
+
+  if (loading) {
+    return <div className="dashboard-content">Loading your dashboard...</div>;
+  }
+
+  const activeCount = orders.filter((o) =>
+    ["placed", "printing", "ready"].includes(o.status || "placed")
+  ).length;
+  const completedCount = orders.filter((o) => o.status === "completed").length;
+  const totalSpent = orders.reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
+  const readyForPickup = orders.filter((o) => o.status === "ready");
+
+  const recentOrders = [...orders]
+    .sort((a, b) => {
+      const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+      const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+      return bTime - aTime;
+    })
+    .slice(0, 3);
+
+  return (
+    <div className="dashboard-content">
+      {error && <div className="um-error">{error}</div>}
+
+      <h3 className="welcome-title">Welcome back, {displayName.split(" ")[0]} 👋</h3>
+
+      {readyForPickup.length > 0 && (
+        <div className="pickup-banner">
+          <span>
+            🎉 You have {readyForPickup.length} order
+            {readyForPickup.length > 1 ? "s" : ""} ready for pickup!
+          </span>
+          <button type="button" className="pickup-banner__btn" onClick={onGoToOrders}>
+            View Orders
+          </button>
+        </div>
+      )}
+
+      {/* Stat cards */}
+      <div className="stat-grid">
+        <div className="stat-card">
+          <span className="stat-card__label">Total Orders</span>
+          <span className="stat-card__value">{orders.length}</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-card__label">Active Orders</span>
+          <span className="stat-card__value">{activeCount}</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-card__label">Completed</span>
+          <span className="stat-card__value">{completedCount}</span>
+        </div>
+        <div className="stat-card stat-card--accent">
+          <span className="stat-card__label">Total Spent</span>
+          <span className="stat-card__value">₱{totalSpent.toFixed(2)}</span>
+        </div>
+      </div>
+
+      {/* Quick actions */}
+      <div className="quick-actions">
+        <button type="button" className="quick-action-btn" onClick={onGoToServices}>
+          <svg viewBox="0 0 24 24" width="18" height="18">
+            <path
+              fill="currentColor"
+              d="M3 3h8v8H3V3Zm10 0h8v8h-8V3ZM3 13h8v8H3v-8Zm13.5 0 1.6 3.4L21.5 17l-2.6 2.4L19.6 23l-3.1-1.8L13.4 23l.7-3.6L11.5 17l3.4-.6L16.5 13Z"
+            />
+          </svg>
+          Browse Services
+        </button>
+        <button type="button" className="quick-action-btn quick-action-btn--outline" onClick={onGoToOrders}>
+          View All Orders
+        </button>
+      </div>
+
+      {/* Recent orders */}
+      <h3 className="dashboard-section__title">Recent Orders</h3>
+      {recentOrders.length === 0 ? (
+        <div className="um-empty">
+          You haven't placed any orders yet. Browse Services to get started.
+        </div>
+      ) : (
+        <div className="order-history">
+          {recentOrders.map((order) => {
+            const lines = getOrderLines(order);
+            const summary =
+              lines.length > 1
+                ? `${lines[0].serviceName} + ${lines.length - 1} more item${
+                    lines.length - 1 > 1 ? "s" : ""
+                  }`
+                : lines[0]
+                ? `${lines[0].serviceName}${lines[0].varietyName ? ` (${lines[0].varietyName})` : ""}`
+                : "Order";
+
+            return (
+              <div
+                key={order.id}
+                className="order-card order-card--clickable"
+                onClick={() => setSelectedOrder(order)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") setSelectedOrder(order);
+                }}
+              >
+                <div className="order-card__top">
+                  <span className="order-card__service">{summary}</span>
+                  <span className={`order-status order-status--${order.status || "placed"}`}>
+                    {statusLabel(order.status)}
+                  </span>
+                </div>
+                {order.totalPrice != null && (
+                  <div className="order-card__meta">
+                    <span className="order-card__total">
+                      Total: ₱{Number(order.totalPrice).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {selectedOrder && (
+        <Receipt
+          order={selectedOrder}
+          customerName={customerName}
+          onClose={() => setSelectedOrder(null)}
+        />
+      )}
     </div>
   );
 }

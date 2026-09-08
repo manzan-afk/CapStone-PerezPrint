@@ -196,12 +196,31 @@ export default function StaffDashboard() {
   );
 }
 
+// Normalizes an order into a flat list of line items, whether it uses the
+// current "items[]" shape or the older single-service fields.
+function getOrderLines(order) {
+  if (order.items?.length > 0) return order.items;
+  if (order.serviceName) {
+    return [
+      {
+        serviceName: order.serviceName,
+        varietyName: order.varietyName || "",
+        quantity: order.quantity || 1,
+        unitPrice: order.unitPrice ?? null,
+        lineTotal: order.totalPrice ?? null,
+      },
+    ];
+  }
+  return [];
+}
+
 function OrderManagement() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState(null);
   const [savedId, setSavedId] = useState(null);
+  const [reviewOrder, setReviewOrder] = useState(null);
 
   useEffect(() => {
     loadOrders();
@@ -240,6 +259,21 @@ function OrderManagement() {
     }
   }
 
+  async function handleAccept(orderId) {
+    setSavingId(orderId);
+    try {
+      await updateOrderStatus(orderId, "printing");
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: "printing" } : o))
+      );
+      setReviewOrder(null);
+    } catch (err) {
+      setError("Failed to accept order. Please try again.");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   function formatDate(ts) {
     if (!ts?.toDate) return "—";
     return ts.toDate().toLocaleDateString(undefined, {
@@ -261,83 +295,181 @@ function OrderManagement() {
         <div className="um-empty">No orders have been placed yet.</div>
       ) : (
         <div className="ord-list">
-          {orders.map((order) => (
-            <div key={order.id} className="ord-card">
-              <div className="ord-card__header">
-                <div>
-                  <span className="ord-card__service">{order.serviceName || "Service"}</span>
-                  <span className="ord-card__date">{formatDate(order.createdAt)}</span>
+          {orders.map((order) => {
+            const lines = getOrderLines(order);
+            const summary =
+              lines.length > 1
+                ? `${lines[0].serviceName} + ${lines.length - 1} more item${
+                    lines.length - 1 > 1 ? "s" : ""
+                  }`
+                : lines[0]
+                ? `${lines[0].serviceName}${lines[0].varietyName ? ` (${lines[0].varietyName})` : ""}`
+                : "Order";
+            const isPlaced = (order.status || "placed") === "placed";
+
+            return (
+              <div key={order.id} className="ord-card">
+                <div className="ord-card__header">
+                  <div>
+                    <span className="ord-card__service">{summary}</span>
+                    <span className="ord-card__date">{formatDate(order.createdAt)}</span>
+                  </div>
+                  <span className={`order-status order-status--${order.status || "placed"}`}>
+                    {statusLabel(order.status)}
+                  </span>
                 </div>
-                <span className={`order-status order-status--${order.status || "placed"}`}>
-                  {statusLabel(order.status)}
-                </span>
-              </div>
 
-              <div className="ord-card__customer">{order.customerEmail || "Unknown customer"}</div>
+                <div className="ord-card__customer">{order.customerEmail || "Unknown customer"}</div>
 
-              {order.description && (
-                <p className="ord-card__desc">{order.description}</p>
-              )}
+                {order.referenceId && (
+                  <div className="ord-card__ref">Ref: {order.referenceId}</div>
+                )}
 
-              {(order.quantity || order.totalPrice != null) && (
-                <div className="ord-card__meta">
-                  {order.quantity && (
-                    <span>
-                      Qty: {order.quantity} {order.unit || ""}
-                    </span>
-                  )}
-                  {order.totalPrice != null && (
+                {order.totalPrice != null && (
+                  <div className="ord-card__meta">
                     <span className="ord-card__total">
                       Total: ₱{Number(order.totalPrice).toFixed(2)}
                     </span>
+                  </div>
+                )}
+
+                <div className="ord-card__actions">
+                  {isPlaced ? (
+                    <button
+                      className="um-save-btn"
+                      onClick={() => setReviewOrder(order)}
+                    >
+                      Review &amp; Accept
+                    </button>
+                  ) : (
+                    <>
+                      <select
+                        className="um-role-select"
+                        value={order.status || "placed"}
+                        onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                      >
+                        {ORDER_STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            {statusLabel(s)}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="um-save-btn"
+                        onClick={() => handleSaveStatus(order.id, order.status || "placed")}
+                        disabled={savingId === order.id}
+                      >
+                        {savingId === order.id
+                          ? "Saving..."
+                          : savedId === order.id
+                          ? "Saved ✓"
+                          : "Save"}
+                      </button>
+                    </>
                   )}
                 </div>
-              )}
-
-              {order.files?.length > 0 && (
-                <div className="ord-card__files">
-                  {order.files.map((f, i) => (
-                    <a
-                      key={i}
-                      href={f.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="ord-card__file-link"
-                    >
-                      📎 {f.name}
-                    </a>
-                  ))}
-                </div>
-              )}
-
-              <div className="ord-card__actions">
-                <select
-                  className="um-role-select"
-                  value={order.status || "placed"}
-                  onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                >
-                  {ORDER_STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {statusLabel(s)}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="um-save-btn"
-                  onClick={() => handleSaveStatus(order.id, order.status || "placed")}
-                  disabled={savingId === order.id}
-                >
-                  {savingId === order.id
-                    ? "Saving..."
-                    : savedId === order.id
-                    ? "Saved ✓"
-                    : "Save"}
-                </button>
               </div>
+            );
+          })}
+        </div>
+      )}
+
+      {reviewOrder && (
+        <ReviewOrderModal
+          order={reviewOrder}
+          saving={savingId === reviewOrder.id}
+          onClose={() => setReviewOrder(null)}
+          onAccept={() => handleAccept(reviewOrder.id)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ReviewOrderModal({ order, saving, onClose, onAccept }) {
+  const [confirmed, setConfirmed] = useState(false);
+  const lines = getOrderLines(order);
+
+  return (
+    <div className="order-modal-overlay" onClick={onClose}>
+      <div className="order-modal" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="order-modal__close" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
+
+        <h3 className="order-modal__title">Review Order</h3>
+        <div className="review-customer">{order.customerEmail || "Unknown customer"}</div>
+        {order.referenceId && (
+          <div className="review-ref">Ref: {order.referenceId}</div>
+        )}
+
+        <div className="review-lines">
+          {lines.map((line, i) => (
+            <div key={i} className="review-line">
+              <span>
+                {line.serviceName}
+                {line.varietyName ? ` (${line.varietyName})` : ""} x{line.quantity || 1}
+              </span>
+              <span>
+                {line.lineTotal != null ? `₱${Number(line.lineTotal).toFixed(2)}` : "—"}
+              </span>
             </div>
           ))}
         </div>
-      )}
+
+        {order.description && (
+          <div className="review-section">
+            <span className="field-label">Specifications / Description</span>
+            <p className="review-desc">{order.description}</p>
+          </div>
+        )}
+
+        {order.files?.length > 0 && (
+          <div className="review-section">
+            <span className="field-label">Attached Files</span>
+            <div className="review-files">
+              {order.files.map((f, i) => (
+                <a
+                  key={i}
+                  href={f.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="order-card__file-link"
+                >
+                  📎 {f.name}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {order.totalPrice != null && (
+          <div className="review-total">
+            TOTAL: ₱{Number(order.totalPrice).toFixed(2)}
+          </div>
+        )}
+
+        <label className="review-confirm-check">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(e) => setConfirmed(e.target.checked)}
+          />
+          <span>
+            I have reviewed the specifications and files for this order and
+            confirm they are complete and printable.
+          </span>
+        </label>
+
+        <button
+          type="button"
+          className="login-btn order-submit-btn"
+          disabled={!confirmed || saving}
+          onClick={onAccept}
+        >
+          {saving ? "Accepting..." : "Accept Order"}
+        </button>
+      </div>
     </div>
   );
 }
