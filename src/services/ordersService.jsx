@@ -111,6 +111,21 @@ export function updateOrderStatus(orderId, status) {
 }
 
 /**
+ * Sends an order back to the customer with a note explaining what needs
+ * to be fixed (wrong file, unclear specs, etc.), instead of accepting it.
+ * @param {string} orderId
+ * @param {string} note - explanation shown to the customer
+ * @returns {Promise<void>}
+ */
+export function requestOrderRevision(orderId, note) {
+  return updateDoc(doc(db, "orders", orderId), {
+    status: "needs_revision",
+    staffNote: note,
+    revisionRequestedAt: serverTimestamp(),
+  });
+}
+
+/**
  * Fetches every order — for admin/staff order management.
  * @returns {Promise<Array<object>>}
  */

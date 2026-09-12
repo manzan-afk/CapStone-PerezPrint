@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { getAllOrders, updateOrderStatus } from "../services/ordersService";
+import { getAllOrders, updateOrderStatus, requestOrderRevision } from "../services/ordersService";
 import "./StaffDashboard.css";
 
-const ORDER_STATUSES = ["placed", "printing", "ready", "completed"];
+const ORDER_STATUSES = ["placed", "printing", "ready", "completed", "needs_revision"];
 
 function statusLabel(s) {
   switch (s) {
@@ -16,6 +16,8 @@ function statusLabel(s) {
       return "Ready for Pickup";
     case "completed":
       return "Completed";
+    case "needs_revision":
+      return "Needs Revision";
     default:
       return s || "Placed";
   }
@@ -179,9 +181,14 @@ export default function StaffDashboard() {
         </header>
 
         {view === "dashboard" && (
-          <div className="dashboard-content dashboard-content--empty">
-            {/* Intentionally blank — content coming later */}
-          </div>
+          <StaffOverview
+            displayName={
+              profile?.firstName || profile?.lastName
+                ? `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim()
+                : user?.email || "Staff"
+            }
+            onGoToOrders={() => setView("orders")}
+          />
         )}
 
         {view === "orders" && <OrderManagement />}
@@ -212,6 +219,115 @@ function getOrderLines(order) {
     ];
   }
   return [];
+}
+
+function StaffOverview({ displayName, onGoToOrders }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  async function loadOrders() {
+    setLoading(true);
+    setError("");
+    try {
+      const all = await getAllOrders();
+      setOrders(all);
+    } catch (err) {
+      setError("Failed to load orders.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="dashboard-content">Loading dashboard...</div>;
+  }
+
+  const placedOrders = orders.filter((o) => (o.status || "placed") === "placed");
+  const printingOrders = orders.filter((o) => o.status === "printing");
+  const readyOrders = orders.filter((o) => o.status === "ready");
+  const completedCount = orders.filter((o) => o.status === "completed").length;
+
+  function formatDate(ts) {
+    if (!ts?.toDate) return "—";
+    return ts.toDate().toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
+  return (
+    <div className="dashboard-content">
+      {error && <div className="um-error">{error}</div>}
+
+      <h3 className="welcome-title">Welcome back, {displayName.split(" ")[0]}</h3>
+
+      {placedOrders.length > 0 && (
+        <div className="attention-banner">
+          <span>
+            ⚠️ {placedOrders.length} order{placedOrders.length > 1 ? "s" : ""}{" "}
+            waiting for review
+          </span>
+          <button type="button" className="attention-banner__btn" onClick={onGoToOrders}>
+            Review Now
+          </button>
+        </div>
+      )}
+
+      <div className="stat-grid">
+        <div className="stat-card">
+          <span className="stat-card__label">Awaiting Review</span>
+          <span className="stat-card__value">{placedOrders.length}</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-card__label">In Printing</span>
+          <span className="stat-card__value">{printingOrders.length}</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-card__label">Ready for Pickup</span>
+          <span className="stat-card__value">{readyOrders.length}</span>
+        </div>
+        <div className="stat-card stat-card--accent">
+          <span className="stat-card__label">Completed</span>
+          <span className="stat-card__value">{completedCount}</span>
+        </div>
+      </div>
+
+      <button type="button" className="quick-action-btn" onClick={onGoToOrders}>
+        View All Orders
+      </button>
+
+      <h3 className="dashboard-section__title" style={{ marginTop: 26 }}>
+        Orders Awaiting Review
+      </h3>
+      {placedOrders.length === 0 ? (
+        <div className="um-empty">No orders are waiting for review right now.</div>
+      ) : (
+        <div className="ord-list">
+          {placedOrders.slice(0, 5).map((order) => {
+            const lines = getOrderLines(order);
+            const summary =
+              lines.length > 1
+                ? `${lines[0].serviceName} + ${lines.length - 1} more`
+                : lines[0]?.serviceName || "Order";
+            return (
+              <div key={order.id} className="ord-card">
+                <div className="ord-card__header">
+                  <div>
+                    <span className="ord-card__service">{summary}</span>
+                    <span className="ord-card__date">{formatDate(order.createdAt)}</span>
+                  </div>
+                  <span className="order-status order-status--placed">Placed</span>
+                </div>
+                <div className="ord-card__customer">{order.customerEmail || "Unknown customer"}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function OrderManagement() {
@@ -274,6 +390,23 @@ function OrderManagement() {
     }
   }
 
+  async function handleRequestRevision(orderId, note) {
+    setSavingId(orderId);
+    try {
+      await requestOrderRevision(orderId, note);
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId ? { ...o, status: "needs_revision", staffNote: note } : o
+        )
+      );
+      setReviewOrder(null);
+    } catch (err) {
+      setError("Failed to send revision request. Please try again.");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   function formatDate(ts) {
     if (!ts?.toDate) return "—";
     return ts.toDate().toLocaleDateString(undefined, {
@@ -320,6 +453,12 @@ function OrderManagement() {
                 </div>
 
                 <div className="ord-card__customer">{order.customerEmail || "Unknown customer"}</div>
+
+                {order.status === "needs_revision" && order.staffNote && (
+                  <div className="ord-card__staff-note">
+                    <strong>Your note to customer:</strong> {order.staffNote}
+                  </div>
+                )}
 
                 {order.referenceId && (
                   <div className="ord-card__ref">Ref: {order.referenceId}</div>
@@ -380,15 +519,28 @@ function OrderManagement() {
           saving={savingId === reviewOrder.id}
           onClose={() => setReviewOrder(null)}
           onAccept={() => handleAccept(reviewOrder.id)}
+          onRequestRevision={(note) => handleRequestRevision(reviewOrder.id, note)}
         />
       )}
     </div>
   );
 }
 
-function ReviewOrderModal({ order, saving, onClose, onAccept }) {
+function ReviewOrderModal({ order, saving, onClose, onAccept, onRequestRevision }) {
   const [confirmed, setConfirmed] = useState(false);
+  const [showRevisionNote, setShowRevisionNote] = useState(false);
+  const [revisionNote, setRevisionNote] = useState("");
+  const [revisionError, setRevisionError] = useState("");
   const lines = getOrderLines(order);
+
+  function handleSendRevision() {
+    if (!revisionNote.trim()) {
+      setRevisionError("Please explain what needs to change.");
+      return;
+    }
+    setRevisionError("");
+    onRequestRevision(revisionNote.trim());
+  }
 
   return (
     <div className="order-modal-overlay" onClick={onClose}>
@@ -461,14 +613,63 @@ function ReviewOrderModal({ order, saving, onClose, onAccept }) {
           </span>
         </label>
 
-        <button
-          type="button"
-          className="login-btn order-submit-btn"
-          disabled={!confirmed || saving}
-          onClick={onAccept}
-        >
-          {saving ? "Accepting..." : "Accept Order"}
-        </button>
+        {!showRevisionNote ? (
+          <div className="review-actions">
+            <button
+              type="button"
+              className="review-reject-btn"
+              onClick={() => setShowRevisionNote(true)}
+              disabled={saving}
+            >
+              Request Changes
+            </button>
+            <button
+              type="button"
+              className="login-btn order-submit-btn"
+              disabled={!confirmed || saving}
+              onClick={onAccept}
+            >
+              {saving ? "Accepting..." : "Accept Order"}
+            </button>
+          </div>
+        ) : (
+          <div className="revision-note-block">
+            <label className="field-label" htmlFor="revisionNote">
+              What needs to change?
+            </label>
+            <textarea
+              id="revisionNote"
+              className="order-textarea"
+              rows={3}
+              placeholder="e.g. The uploaded file is blurry — please re-upload a higher resolution version."
+              value={revisionNote}
+              onChange={(e) => setRevisionNote(e.target.value)}
+            />
+            <div className="field-error">{revisionError}</div>
+            <div className="review-actions">
+              <button
+                type="button"
+                className="review-cancel-btn"
+                onClick={() => {
+                  setShowRevisionNote(false);
+                  setRevisionNote("");
+                  setRevisionError("");
+                }}
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="review-reject-btn review-reject-btn--solid"
+                onClick={handleSendRevision}
+                disabled={saving}
+              >
+                {saving ? "Sending..." : "Send to Customer"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

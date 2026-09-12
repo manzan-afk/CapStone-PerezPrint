@@ -285,6 +285,8 @@ function CustomerOverview({ uid, displayName, customerName, onGoToServices, onGo
         return "Ready for Pickup";
       case "completed":
         return "Completed";
+      case "needs_revision":
+        return "Needs Revision";
       default:
         return s || "Placed";
     }
@@ -966,6 +968,12 @@ function Receipt({ order, customerName, onClose }) {
           <p className="receipt__desc">{order.description}</p>
         )}
 
+        {order.status === "needs_revision" && order.staffNote && (
+          <div className="receipt__revision-note">
+            <strong>⚠️ Changes needed:</strong> {order.staffNote}
+          </div>
+        )}
+
         <div className="receipt__divider" />
 
         <p className="receipt__total">
@@ -1021,6 +1029,8 @@ function OrderHistory({ uid, customerName }) {
         return "Ready for Pickup";
       case "completed":
         return "Completed";
+      case "needs_revision":
+        return "Needs Revision";
       default:
         return s || "Placed";
     }
@@ -1068,6 +1078,11 @@ function OrderHistory({ uid, customerName }) {
                 </div>
                 {order.referenceId && (
                   <div className="order-card__ref">Ref: {order.referenceId}</div>
+                )}
+                {order.status === "needs_revision" && order.staffNote && (
+                  <div className="order-card__revision-note">
+                    <strong>⚠️ Changes needed:</strong> {order.staffNote}
+                  </div>
                 )}
                 {order.description && (
                   <p className="order-card__desc">{order.description}</p>

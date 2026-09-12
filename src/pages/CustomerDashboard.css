@@ -1156,3 +1156,33 @@
   color: var(--text-dark);
   margin: 0 0 14px;
 }
+
+/* ---------- Needs Revision feedback ---------- */
+
+.order-status--needs_revision {
+  background: #fdecea;
+  color: #b3261e;
+}
+
+.order-card__revision-note {
+  background: #fdecea;
+  border: 1px solid #f5c2c0;
+  color: #8a2e28;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.receipt__revision-note {
+  background: #fdecea;
+  border: 1px solid #f5c2c0;
+  color: #8a2e28;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+  margin: 4px 0 0;
+}
