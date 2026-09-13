@@ -21,14 +21,38 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #eef1f5;
+  position: relative;
+  background: linear-gradient(160deg, #1b2436 0%, #29344a 45%, #3a4666 100%);
   padding: 24px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow: hidden;
+}
+
+.login-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.12) 1.5px, transparent 1.5px);
+  background-size: 28px 28px;
+  pointer-events: none;
+}
+
+.login-page::after {
+  content: "";
+  position: absolute;
+  top: -200px;
+  right: -200px;
+  width: 1500px;
+  height: 1000px;
+  background: radial-gradient(circle, rgba(255, 138, 30, 0.35) 0%, transparent 80%);
+  pointer-events: none;
 }
 
 /* ---------- Unified shell ---------- */
 
 .login-shell {
+  position: relative;
+  z-index: 1;
   display: flex;
   width: 100%;
   max-width: 920px;
@@ -58,8 +82,8 @@
 }
 
 .brand-panel__logo {
-  width: 40px;
-  height: 40px;
+  width: 80px;
+  height: 80px;
   object-fit: contain;
   flex-shrink: 0;
 }
@@ -74,7 +98,7 @@
 
 .brand-panel__subtitle {
   margin: 1px 0 0;
-  font-size: 11.5px;
+  font-size: 30px;
   color: #4dd8d8;
   font-weight: 500;
 }
