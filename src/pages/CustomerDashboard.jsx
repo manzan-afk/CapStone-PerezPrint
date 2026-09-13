@@ -269,6 +269,7 @@ function CustomerOverview({ uid, displayName, customerName, onGoToServices, onGo
       const userOrders = await getUserOrders(uid);
       setOrders(userOrders);
     } catch (err) {
+      console.error("Failed to load orders (overview):", err);
       setError("Failed to load your orders.");
     } finally {
       setLoading(false);
@@ -1001,6 +1002,7 @@ function Receipt({ order, customerName, onClose }) {
 function OrderHistory({ uid, customerName }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
 
   useEffect(() => {
@@ -1009,11 +1011,17 @@ function OrderHistory({ uid, customerName }) {
 
   async function loadOrders() {
     setLoading(true);
+    setError("");
     try {
       const userOrders = await getUserOrders(uid);
       setOrders(userOrders);
     } catch (err) {
-      // Non-fatal
+      console.error("Failed to load orders:", err);
+      setError(
+        err.code === "failed-precondition"
+          ? "A Firestore index is required for this query — check the browser console for a link to create it."
+          : "Failed to load your orders. Please refresh and try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -1042,11 +1050,14 @@ function OrderHistory({ uid, customerName }) {
 
   return (
     <div className="dashboard-content">
+      {error && <div className="um-error">{error}</div>}
+
       {orders.length === 0 ? (
         <div className="um-empty">
           You haven't placed any orders yet. Browse Services to get started.
         </div>
-      ) : (
+      )
+       : (
         <div className="order-history">
           {orders.map((order) => {
             const lines = getOrderLines(order);

@@ -170,14 +170,54 @@ export default function CreateAccount() {
 
   return (
     <div className="login-page">
-      <div className="login-wrap">
-        {/* Create account card */}
-        <div className="login-card">
-          <div className="login-card__header">
-            <h1>Sign Up</h1>
+      <div className="login-shell">
+        {/* Left: feature / brand panel */}
+        <div className="brand-panel">
+          <div className="brand-panel__top">
+            <img src="/logo.png" alt="Perez Printing Shop logo" className="brand-panel__logo" />
+            <div>
+              <h2 className="brand-panel__title">PEREZ</h2>
+              <p className="brand-panel__subtitle">Printing Shop</p>
+            </div>
           </div>
 
-          <form onSubmit={handleSubmit} noValidate className="login-card__body">
+          <div className="brand-panel__body">
+            <h3 className="brand-panel__heading">Join Perez Printing Shop</h3>
+            <p className="brand-panel__lead">
+              Create an account to place orders, track their status, and
+              pick up right on time.
+            </p>
+
+            <ul className="brand-panel__features">
+              <li>
+                <span className="brand-panel__feature-icon">✓</span>
+                Order online, anytime
+              </li>
+              <li>
+                <span className="brand-panel__feature-icon">✓</span>
+                Get SMS updates on your order
+              </li>
+              <li>
+                <span className="brand-panel__feature-icon">✓</span>
+                Track pickup status in real time
+              </li>
+            </ul>
+          </div>
+
+          <p className="brand-panel__footer">
+            © {new Date().getFullYear()} Perez Printing Shop
+          </p>
+        </div>
+
+        {/* Right: sign up form */}
+        <div className="login-panel">
+          <div className="login-panel__inner">
+            <h1 className="login-panel__title">Create your account</h1>
+            <p className="login-panel__subtitle">
+              Sign up to start placing orders
+            </p>
+
+            <form onSubmit={handleSubmit} noValidate className="login-form">
             <label className="field-label" htmlFor="firstName">First Name</label>
             <div className="input-group">
               <input
@@ -394,17 +434,14 @@ export default function CreateAccount() {
               <div className={`status ${status.type}`}>{status.text}</div>
             )}
 
-            <Link to="/" className="create-account">
-              Back to Login
-            </Link>
-          </form>
-        </div>
-
-        {/* Brand panel */}
-        <div className="brand-panel">
-          <img src="/logo.png" alt="Perez Printing Shop logo" className="brand-panel__logo" />
-          <h2 className="brand-panel__title">PEREZ</h2>
-          <p className="brand-panel__subtitle">Printing Shop</p>
+              <p className="login-panel__signup">
+                Already have an account?{" "}
+                <Link to="/" className="login-panel__signup-link">
+                  Sign in
+                </Link>
+              </p>
+            </form>
+          </div>
         </div>
       </div>
     </div>

@@ -89,13 +89,49 @@ export default function CompleteRegistration() {
 
   return (
     <div className="login-page">
-      <div className="login-wrap">
-        <div className="login-card">
-          <div className="login-card__header">
-            <h1>Complete Registration</h1>
+      <div className="login-shell">
+        {/* Left: feature / brand panel */}
+        <div className="brand-panel">
+          <div className="brand-panel__top">
+            <img src="/logo.png" alt="Perez Printing Shop logo" className="brand-panel__logo" />
+            <div>
+              <h2 className="brand-panel__title">PEREZ</h2>
+              <p className="brand-panel__subtitle">Printing Shop</p>
+            </div>
           </div>
 
-          <form onSubmit={handleSubmit} noValidate className="login-card__body">
+          <div className="brand-panel__body">
+            <h3 className="brand-panel__heading">Almost there</h3>
+            <p className="brand-panel__lead">
+              Just a few details to finish setting up your account.
+            </p>
+
+            <ul className="brand-panel__features">
+              <li>
+                <span className="brand-panel__feature-icon">✓</span>
+                Signed in securely with Google
+              </li>
+              <li>
+                <span className="brand-panel__feature-icon">✓</span>
+                Takes less than a minute
+              </li>
+            </ul>
+          </div>
+
+          <p className="brand-panel__footer">
+            © {new Date().getFullYear()} Perez Printing Shop
+          </p>
+        </div>
+
+        {/* Right: registration form */}
+        <div className="login-panel">
+          <div className="login-panel__inner">
+            <h1 className="login-panel__title">Complete Registration</h1>
+            <p className="login-panel__subtitle">
+              Just a few more details to finish setting up your account
+            </p>
+
+            <form onSubmit={handleSubmit} noValidate className="login-form">
             {/* Email — locked in from the Google account, read-only */}
             <div className="input-group">
               <span className="input-icon" aria-hidden="true">
@@ -185,13 +221,8 @@ export default function CompleteRegistration() {
             {status.text && (
               <div className={`status ${status.type}`}>{status.text}</div>
             )}
-          </form>
-        </div>
-
-        <div className="brand-panel">
-          <img src="/logo.png" alt="Perez Printing Shop logo" className="brand-panel__logo" />
-          <h2 className="brand-panel__title">PEREZ</h2>
-          <p className="brand-panel__subtitle">Printing Shop</p>
+            </form>
+          </div>
         </div>
       </div>
     </div>
