@@ -815,13 +815,8 @@ function ServiceModal({ initialService, onClose, onSaved }) {
 
   // Print specification option groups
   const [paperSizes, setPaperSizes] = useState(initialService?.paperSizes || []);
-  const [paperTypes, setPaperTypes] = useState(initialService?.paperTypes || []);
   const [colorOptions, setColorOptions] = useState(initialService?.colorOptions || []);
   const [printingSides, setPrintingSides] = useState(initialService?.printingSides || []);
-  const [bindingOptions, setBindingOptions] = useState(initialService?.bindingOptions || []);
-  const [specialInstructionsHint, setSpecialInstructionsHint] = useState(
-    initialService?.specialInstructionsHint || ""
-  );
 
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -870,11 +865,8 @@ function ServiceModal({ initialService, onClose, onSaved }) {
         unit: unit.trim(),
         varieties,
         paperSizes,
-        paperTypes,
         colorOptions,
         printingSides,
-        bindingOptions,
-        specialInstructionsHint: specialInstructionsHint.trim(),
       };
 
       if (isEdit) {
@@ -1047,12 +1039,6 @@ function ServiceModal({ initialService, onClose, onSaved }) {
               onChange={setPaperSizes}
             />
             <TagListField
-              label="Paper Type"
-              placeholder="e.g. Bond Paper"
-              values={paperTypes}
-              onChange={setPaperTypes}
-            />
-            <TagListField
               label="Color"
               placeholder="e.g. Colored"
               values={colorOptions}
@@ -1063,27 +1049,6 @@ function ServiceModal({ initialService, onClose, onSaved }) {
               placeholder="e.g. Single-sided"
               values={printingSides}
               onChange={setPrintingSides}
-            />
-            <TagListField
-              label="Binding"
-              placeholder="e.g. Stapled"
-              values={bindingOptions}
-              onChange={setBindingOptions}
-            />
-
-            <label className="field-label" htmlFor="svcInstructionsHint">
-              Special Instructions{" "}
-              <span className="field-label__hint">
-                (example placeholder shown to the customer)
-              </span>
-            </label>
-            <input
-              id="svcInstructionsHint"
-              type="text"
-              className="order-select"
-              placeholder="e.g. Staple upper-left"
-              value={specialInstructionsHint}
-              onChange={(e) => setSpecialInstructionsHint(e.target.value)}
             />
           </div>
 

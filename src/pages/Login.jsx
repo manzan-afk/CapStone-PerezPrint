@@ -118,11 +118,10 @@ export default function Login() {
 
           <div className="brand-panel__body">
             <h3 className="brand-panel__heading">
-              Manage your print shop, start to finish.
+              Welcome!
             </h3>
             <p className="brand-panel__lead">
-              Orders, services, and customers — all in one place, built for
-              how your shop actually runs.
+              Orders, services, and easy transaction — all in one place.
             </p>
 
             <ul className="brand-panel__features">
@@ -132,11 +131,11 @@ export default function Login() {
               </li>
               <li>
                 <span className="brand-panel__feature-icon">✓</span>
-                Manage services, pricing, and staff
+                Valid pricing and services
               </li>
               <li>
                 <span className="brand-panel__feature-icon">✓</span>
-                Give customers real-time order status
+                Real-time order status
               </li>
             </ul>
           </div>

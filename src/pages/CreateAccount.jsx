@@ -184,7 +184,7 @@ export default function CreateAccount() {
           <div className="brand-panel__body">
             <h3 className="brand-panel__heading">Join Perez Printing Shop</h3>
             <p className="brand-panel__lead">
-              Create an account to place orders, track their status, and
+              Create an account to place orders, track your status, and
               pick up right on time.
             </p>
 
