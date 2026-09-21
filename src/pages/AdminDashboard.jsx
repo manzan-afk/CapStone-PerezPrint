@@ -286,6 +286,11 @@ function DashboardOverview() {
       {/* Stat cards */}
       <div className="stat-grid">
         <div className="stat-card">
+          <div className="stat-card__icon stat-card__icon--users">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="M16 11c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3Zm-8 0c1.7 0 3-1.3 3-3S9.7 5 8 5 5 6.3 5 8s1.3 3 3 3Zm0 2c-2.3 0-7 1.2-7 3.5V19h9v-2.5c0-.9.3-2 .9-2.9C10.1 13.2 8.9 13 8 13Zm8 0c-.3 0-.6 0-.9.1.7 1 1 2.2 1 3.4V19h7v-2.5c0-2.3-4.7-3.5-7-3.5Z"/>
+            </svg>
+          </div>
           <span className="stat-card__label">Total Users</span>
           <span className="stat-card__value">{users.length}</span>
           <span className="stat-card__sub">
@@ -294,12 +299,22 @@ function DashboardOverview() {
         </div>
 
         <div className="stat-card">
+          <div className="stat-card__icon stat-card__icon--services">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="M3 3h8v8H3V3Zm10 0h8v8h-8V3ZM3 13h8v8H3v-8Zm13.5 0 1.6 3.4L21.5 17l-2.6 2.4L19.6 23l-3.1-1.8L13.4 23l.7-3.6L11.5 17l3.4-.6L16.5 13Z"/>
+            </svg>
+          </div>
           <span className="stat-card__label">Services Offered</span>
           <span className="stat-card__value">{services.length}</span>
           <span className="stat-card__sub">across all categories</span>
         </div>
 
         <div className="stat-card">
+          <div className="stat-card__icon stat-card__icon--orders">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6Zm0 2h12l1.5 2h-15L6 4Zm-1 4h14v12H5V8Zm3 2v2h8v-2H8Z"/>
+            </svg>
+          </div>
           <span className="stat-card__label">Total Orders</span>
           <span className="stat-card__value">{orders.length}</span>
           <span className="stat-card__sub">
@@ -308,6 +323,11 @@ function DashboardOverview() {
         </div>
 
         <div className="stat-card stat-card--accent">
+          <div className="stat-card__icon stat-card__icon--revenue">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm.5 15.5v1h-1v-1c-1.4-.2-2.5-1-2.9-2.4l1.4-.6c.3.9 1 1.4 2 1.4.9 0 1.6-.4 1.6-1.1 0-.7-.5-1-1.9-1.4-1.8-.5-2.9-1.1-2.9-2.7 0-1.3 1-2.2 2.4-2.4v-1h1v1c1.2.2 2.1.9 2.5 2l-1.4.6c-.3-.7-.9-1.1-1.7-1.1-.8 0-1.4.4-1.4 1s.5.9 1.8 1.3c2 .6 3 1.2 3 2.8 0 1.4-1.1 2.3-2.5 2.5Z"/>
+            </svg>
+          </div>
           <span className="stat-card__label">Total Revenue</span>
           <span className="stat-card__value">₱{totalRevenue.toFixed(2)}</span>
           <span className="stat-card__sub">across all orders</span>

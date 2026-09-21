@@ -277,18 +277,38 @@ function StaffOverview({ displayName, onGoToOrders }) {
 
       <div className="stat-grid">
         <div className="stat-card">
+          <div className="stat-card__icon stat-card__icon--review">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm.9 15h-1.8v-1.8h1.8Zm1.86-7.05-.81.83A2.53 2.53 0 0 0 13 12.5V13h-1.8v-.62a3.1 3.1 0 0 1 1.1-2.15l1.1-1.1a1.5 1.5 0 1 0-2.6-1.02H8a3.5 3.5 0 1 1 6.76 1.24Z"/>
+            </svg>
+          </div>
           <span className="stat-card__label">Awaiting Review</span>
           <span className="stat-card__value">{placedOrders.length}</span>
         </div>
         <div className="stat-card">
+          <div className="stat-card__icon stat-card__icon--printing">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6Zm0 2h12l1.5 2h-15L6 4Zm-1 4h14v12H5V8Zm3 2v2h8v-2H8Z"/>
+            </svg>
+          </div>
           <span className="stat-card__label">In Printing</span>
           <span className="stat-card__value">{printingOrders.length}</span>
         </div>
         <div className="stat-card">
+          <div className="stat-card__icon stat-card__icon--ready">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7Zm-2 8h14v10H5V10Z"/>
+            </svg>
+          </div>
           <span className="stat-card__label">Ready for Pickup</span>
           <span className="stat-card__value">{readyOrders.length}</span>
         </div>
         <div className="stat-card stat-card--accent">
+          <div className="stat-card__icon stat-card__icon--completed">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="m9 16.2-3.5-3.5L4 14.2 9 19.2 20 8.2l-1.5-1.5Z"/>
+            </svg>
+          </div>
           <span className="stat-card__label">Completed</span>
           <span className="stat-card__value">{completedCount}</span>
         </div>

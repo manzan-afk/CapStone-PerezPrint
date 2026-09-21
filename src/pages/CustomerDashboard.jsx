@@ -333,18 +333,38 @@ function CustomerOverview({ uid, displayName, customerName, onGoToServices, onGo
       {/* Stat cards */}
       <div className="stat-grid">
         <div className="stat-card">
+          <div className="stat-card__icon stat-card__icon--total">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6Zm0 2h12l1.5 2h-15L6 4Zm-1 4h14v12H5V8Zm3 2v2h8v-2H8Z"/>
+            </svg>
+          </div>
           <span className="stat-card__label">Total Orders</span>
           <span className="stat-card__value">{orders.length}</span>
         </div>
         <div className="stat-card">
+          <div className="stat-card__icon stat-card__icon--active">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2Zm6-6v-5a6 6 0 0 0-4-5.65V4a2 2 0 0 0-4 0v1.35A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2Z"/>
+            </svg>
+          </div>
           <span className="stat-card__label">Active Orders</span>
           <span className="stat-card__value">{activeCount}</span>
         </div>
         <div className="stat-card">
+          <div className="stat-card__icon stat-card__icon--completed">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="m9 16.2-3.5-3.5L4 14.2 9 19.2 20 8.2l-1.5-1.5Z"/>
+            </svg>
+          </div>
           <span className="stat-card__label">Completed</span>
           <span className="stat-card__value">{completedCount}</span>
         </div>
         <div className="stat-card stat-card--accent">
+          <div className="stat-card__icon stat-card__icon--spent">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm.5 15.5v1h-1v-1c-1.4-.2-2.5-1-2.9-2.4l1.4-.6c.3.9 1 1.4 2 1.4.9 0 1.6-.4 1.6-1.1 0-.7-.5-1-1.9-1.4-1.8-.5-2.9-1.1-2.9-2.7 0-1.3 1-2.2 2.4-2.4v-1h1v1c1.2.2 2.1.9 2.5 2l-1.4.6c-.3-.7-.9-1.1-1.7-1.1-.8 0-1.4.4-1.4 1s.5.9 1.8 1.3c2 .6 3 1.2 3 2.8 0 1.4-1.1 2.3-2.5 2.5Z"/>
+            </svg>
+          </div>
           <span className="stat-card__label">Total Spent</span>
           <span className="stat-card__value">₱{totalSpent.toFixed(2)}</span>
         </div>
