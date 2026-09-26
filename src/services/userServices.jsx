@@ -16,7 +16,24 @@ export function createUserProfile(uid, data) {
   return setDoc(doc(db, "users", uid), {
     ...data,
     createdAt: serverTimestamp(),
+  }).then(async () => {
+    try {
+      await syncMessageProfile(uid, data);
+    } catch (error) {
+      console.error("Failed to add profile to the messaging directory:", error);
+    }
   });
+}
+
+export function syncMessageProfile(uid, profile) {
+  const displayName = [profile.firstName, profile.lastName].filter(Boolean).join(" ")
+    || profile.email?.split("@")[0]
+    || "User";
+  return setDoc(doc(db, "messageProfiles", uid), {
+    displayName,
+    role: profile.role || "customer",
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
 }
 
 /**
@@ -36,7 +53,14 @@ export async function getUserProfile(uid) {
  * @returns {Promise<void>}
  */
 export function updateUserProfile(uid, data) {
-  return updateDoc(doc(db, "users", uid), data);
+  return updateDoc(doc(db, "users", uid), data).then(async () => {
+    try {
+      const updatedProfile = await getUserProfile(uid);
+      if (updatedProfile) await syncMessageProfile(uid, updatedProfile);
+    } catch (error) {
+      console.error("Failed to update messaging directory profile:", error);
+    }
+  });
 }
 
 /**

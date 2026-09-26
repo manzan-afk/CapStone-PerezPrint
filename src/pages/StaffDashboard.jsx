@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getAllOrders, updateOrderStatus, requestOrderRevision } from "../services/ordersService";
+import DirectMessages from "../components/DirectMessages";
 import "./StaffDashboard.css";
 
 const ORDER_STATUSES = ["placed", "printing", "ready", "completed", "needs_revision"];
@@ -52,6 +53,16 @@ export default function StaffDashboard() {
         <path
           fill="currentColor"
           d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6Zm0 2h12l1.5 2h-15L6 4Zm-1 4h14v12H5V8Zm3 2v2h8v-2H8Z"
+        />
+      ),
+    },
+    {
+      key: "messages",
+      label: "Messages",
+      icon: (
+        <path
+          fill="currentColor"
+          d="M4 4h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-9l-5 3v-3H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 2v11h3v1.5l2.5-1.5H20V6H4Zm3 3h10v2H7V9Zm0 4h7v2H7v-2Z"
         />
       ),
     },
@@ -193,7 +204,15 @@ export default function StaffDashboard() {
 
         {view === "orders" && <OrderManagement />}
 
-        {view !== "dashboard" && view !== "orders" && (
+        {view === "messages" && (
+          <DirectMessages
+            uid={user?.uid}
+            displayName={`${profile?.firstName || ""} ${profile?.lastName || ""}`.trim() || user?.email || "Staff"}
+            role={profile?.role || "staff"}
+          />
+        )}
+
+        {view !== "dashboard" && view !== "orders" && view !== "messages" && (
           <div className="dashboard-content dashboard-content--empty">
             Coming soon.
           </div>
@@ -254,7 +273,14 @@ function StaffOverview({ displayName, onGoToOrders }) {
 
   function formatDate(ts) {
     if (!ts?.toDate) return "—";
-    return ts.toDate().toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return ts.toDate().toLocaleString("en-US", {
+      month: "2-digit",
+      day: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
   }
 
   return (
@@ -429,10 +455,13 @@ function OrderManagement() {
 
   function formatDate(ts) {
     if (!ts?.toDate) return "—";
-    return ts.toDate().toLocaleDateString(undefined, {
+    return ts.toDate().toLocaleString("en-US", {
       year: "numeric",
-      month: "short",
-      day: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
     });
   }
 

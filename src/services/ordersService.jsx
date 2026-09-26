@@ -13,6 +13,7 @@ import {
   where,
   orderBy,
   serverTimestamp,
+  onSnapshot,
 } from "firebase/firestore";
 import { db } from "../firebase-config";
 
@@ -101,13 +102,62 @@ export async function getUserOrders(uid) {
 }
 
 /**
+ * Subscribes to a customer's orders so status notifications update live.
+ * @param {string} uid - the customer's Firebase Auth UID
+ * @param {(orders: Array<object>) => void} onOrders
+ * @param {(error: Error) => void} onError
+ * @returns {() => void} unsubscribe function
+ */
+export function subscribeUserOrders(uid, onOrders, onError) {
+  const q = query(
+    collection(db, "orders"),
+    where("customerId", "==", uid),
+    orderBy("createdAt", "desc")
+  );
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      onOrders(snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      })));
+    },
+    onError
+  );
+}
+
+/**
+ * Subscribes to all orders for staff and admin message feeds.
+ * @param {(orders: Array<object>) => void} onOrders
+ * @param {(error: Error) => void} onError
+ * @returns {() => void} unsubscribe function
+ */
+export function subscribeAllOrders(onOrders, onError) {
+  const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      onOrders(snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      })));
+    },
+    onError
+  );
+}
+
+/**
  * Updates an order's status (e.g. "placed", "printing", "ready", "completed").
  * @param {string} orderId
  * @param {string} status
  * @returns {Promise<void>}
  */
 export function updateOrderStatus(orderId, status) {
-  return updateDoc(doc(db, "orders", orderId), { status });
+  const updates = { status, statusUpdatedAt: serverTimestamp() };
+  if (status === "ready") {
+    updates.pickupReadyAt = serverTimestamp();
+  }
+  return updateDoc(doc(db, "orders", orderId), updates);
 }
 
 /**
@@ -121,6 +171,7 @@ export function requestOrderRevision(orderId, note) {
   return updateDoc(doc(db, "orders", orderId), {
     status: "needs_revision",
     staffNote: note,
+    statusUpdatedAt: serverTimestamp(),
     revisionRequestedAt: serverTimestamp(),
   });
 }
