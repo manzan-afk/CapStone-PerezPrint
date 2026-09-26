@@ -4,7 +4,6 @@ import { useAuth } from "../context/AuthContext";
 import { getAllUsers, updateUserProfile } from "../services/userServices";
 import { getAllServices, addService, updateService, deleteService } from "../services/servicesService";
 import { getAllOrders, updateOrderStatus } from "../services/ordersService";
-import DirectMessages from "../components/DirectMessages";
 import "./AdminDashboard.css";
 
 const ROLES = ["customer", "staff", "admin"];
@@ -124,24 +123,6 @@ export default function AdminDashboard() {
             </svg>
             Orders
           </a>
-
-          <a
-            href="#"
-            className={`nav-item ${view === "messages" ? "nav-item--active" : ""}`}
-            onClick={(e) => {
-              e.preventDefault();
-              setView("messages");
-              setSidebarOpen(false);
-            }}
-          >
-            <svg viewBox="0 0 24 24" width="20" height="20">
-              <path
-                fill="currentColor"
-                d="M4 4h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-9l-5 3v-3H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 2v11h3v1.5l2.5-1.5H20V6H4Zm3 3h10v2H7V9Zm0 4h7v2H7v-2Z"
-              />
-            </svg>
-            Messages
-          </a>
         </nav>
 
         <div className="sidebar__footer">
@@ -197,9 +178,7 @@ export default function AdminDashboard() {
               ? "User Management"
               : view === "services"
               ? "Services"
-              : view === "orders"
-              ? "Orders"
-              : "Messages"}
+              : "Orders"}
           </h2>
         </header>
 
@@ -210,14 +189,6 @@ export default function AdminDashboard() {
         {view === "services" && <ServicesManagement />}
 
         {view === "orders" && <OrderManagement />}
-
-        {view === "messages" && (
-          <DirectMessages
-            uid={user?.uid}
-            displayName={`${profile?.firstName || ""} ${profile?.lastName || ""}`.trim() || user?.email || "Admin"}
-            role={profile?.role || "admin"}
-          />
-        )}
       </main>
     </div>
   );
@@ -302,19 +273,9 @@ function DashboardOverview() {
 
   function formatDate(ts) {
     if (!ts?.toDate) return "—";
-    return ts.toDate().toLocaleDateString("en-US", {
-      month: "2-digit",
-      day: "2-digit",
-      year: "numeric",
-    });
-  }
-
-  function formatTime(ts) {
-    if (!ts?.toDate) return "—";
-    return ts.toDate().toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
+    return ts.toDate().toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
     });
   }
 
@@ -407,7 +368,6 @@ function DashboardOverview() {
                 <th>Total</th>
                 <th>Status</th>
                 <th>Date</th>
-                <th>Time</th>
               </tr>
             </thead>
             <tbody>
@@ -432,7 +392,6 @@ function DashboardOverview() {
                       </span>
                     </td>
                     <td className="um-muted">{formatDate(order.createdAt)}</td>
-                    <td className="um-muted">{formatTime(order.createdAt)}</td>
                   </tr>
                 );
               })}
@@ -1187,13 +1146,10 @@ function OrderManagement() {
 
   function formatDate(ts) {
     if (!ts?.toDate) return "—";
-    return ts.toDate().toLocaleString("en-US", {
+    return ts.toDate().toLocaleDateString(undefined, {
       year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
+      month: "short",
+      day: "numeric",
     });
   }
 

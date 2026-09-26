@@ -1,14 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import DirectMessages from "../components/DirectMessages";
 import { getAllServices } from "../services/servicesService";
-import {
-  uploadOrderFiles,
-  createOrder,
-  getUserOrders,
-  subscribeUserOrders,
-} from "../services/ordersService";
+import { uploadOrderFiles, createOrder, getUserOrders } from "../services/ordersService";
 import "./CustomerDashboard.css";
 
 export default function CustomerDashboard() {
@@ -54,16 +48,6 @@ export default function CustomerDashboard() {
       ),
     },
     {
-      key: "messages",
-      label: "Messages",
-      icon: (
-        <path
-          fill="currentColor"
-          d="M4 4h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-9l-5 3v-3H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 2v11h3v1.5l2.5-1.5H20V6H4Zm3 3h10v2H7V9Zm0 4h7v2H7v-2Z"
-        />
-      ),
-    },
-    {
       key: "payments",
       label: "Payments",
       icon: (
@@ -90,6 +74,16 @@ export default function CustomerDashboard() {
         <path
           fill="currentColor"
           d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2Zm6-6v-5a6 6 0 0 0-4-5.65V4a2 2 0 0 0-4 0v1.35A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2Z"
+        />
+      ),
+    },
+    {
+      key: "contacts",
+      label: "Contacts",
+      icon: (
+        <path
+          fill="currentColor"
+          d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 2v.01L12 12l8-5.99V6H4Zm0 2.24V18h16V8.24l-8 6-8-6Z"
         />
       ),
     },
@@ -248,140 +242,12 @@ export default function CustomerDashboard() {
           />
         )}
 
-        {view === "notifications" && <OrderNotifications uid={user?.uid} />}
-
-        {view === "messages" && (
-          <DirectMessages
-            uid={user?.uid}
-            displayName={`${profile?.firstName || ""} ${profile?.lastName || ""}`.trim() || user?.email || "Customer"}
-            role={profile?.role || "customer"}
-          />
-        )}
-
-        {view !== "dashboard" && view !== "services" && view !== "orders" && view !== "notifications" && view !== "messages" && (
+        {view !== "dashboard" && view !== "services" && view !== "orders" && (
           <div className="dashboard-content dashboard-content--empty">
             Coming soon.
           </div>
         )}
       </main>
-    </div>
-  );
-}
-
-function OrderNotifications({ uid }) {
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!uid) return undefined;
-
-    return subscribeUserOrders(
-      uid,
-      (userOrders) => {
-        setOrders(userOrders);
-        setError("");
-        setLoading(false);
-      },
-      (subscriptionError) => {
-        console.error("Failed to load order notifications:", subscriptionError);
-        setError("Failed to load notifications. Please refresh and try again.");
-        setLoading(false);
-      }
-    );
-  }, [uid]);
-
-  if (loading) {
-    return <div className="dashboard-content">Loading notifications...</div>;
-  }
-
-  const notifications = [...orders].sort((first, second) => {
-    const firstTime = first.statusUpdatedAt?.toDate?.()?.getTime()
-      || first.createdAt?.toDate?.()?.getTime()
-      || 0;
-    const secondTime = second.statusUpdatedAt?.toDate?.()?.getTime()
-      || second.createdAt?.toDate?.()?.getTime()
-      || 0;
-    return secondTime - firstTime;
-  });
-
-  const statusCopy = {
-    placed: "We received your order and will begin processing it.",
-    printing: "Your order is now being printed.",
-    ready: "Your order is ready for pickup.",
-    completed: "Your order has been completed.",
-    needs_revision: "Your order needs attention. Review the staff note below.",
-  };
-
-  return (
-    <div className="dashboard-content">
-      {error && <div className="um-error">{error}</div>}
-
-      {notifications.length === 0 ? (
-        <div className="um-empty">No order notifications yet.</div>
-      ) : (
-        <div className="order-notifications" aria-live="polite">
-          {notifications.map((order) => {
-            const status = order.status || "placed";
-            const lines = getOrderLines(order);
-            const messageTime = order.statusUpdatedAt
-              || order.pickupReadyAt
-              || order.revisionRequestedAt
-              || order.createdAt;
-
-            return (
-              <article className="order-notification" key={order.id}>
-                <div className="order-notification__header">
-                  <h3>
-                    {status === "ready"
-                      ? "Ready for pickup"
-                      : status === "needs_revision"
-                      ? "Order needs attention"
-                      : `Order ${status.replaceAll("_", " ")}`}
-                  </h3>
-                  <time>{formatTimestamp(messageTime)}</time>
-                </div>
-                <p>{statusCopy[status] || `Your order status is ${status}.`}</p>
-
-                <dl className="order-notification__details">
-                  <div>
-                    <dt>Tracking number</dt>
-                    <dd>{order.referenceId || "Not available"}</dd>
-                  </div>
-                  <div>
-                    <dt>Order details</dt>
-                    <dd>
-                      {lines.length > 0
-                        ? lines.map((line) =>
-                            `${line.serviceName}${line.varietyName ? ` (${line.varietyName})` : ""} x${line.quantity || 1}`
-                          ).join(", ")
-                        : "Order details unavailable"}
-                    </dd>
-                  </div>
-                  {order.staffNote && (
-                    <div>
-                      <dt>Staff note</dt>
-                      <dd>{order.staffNote}</dd>
-                    </div>
-                  )}
-                  {order.description && (
-                    <div>
-                      <dt>Additional details</dt>
-                      <dd>{order.description}</dd>
-                    </div>
-                  )}
-                  {order.totalPrice != null && (
-                    <div>
-                      <dt>Total</dt>
-                      <dd>₱{Number(order.totalPrice).toFixed(2)}</dd>
-                    </div>
-                  )}
-                </dl>
-              </article>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
@@ -1064,21 +930,20 @@ function getOrderLines(order) {
   return [];
 }
 
-function formatTimestamp(value) {
-  const date = value?.toDate ? value.toDate() : value instanceof Date ? value : null;
-  if (!date) return "—";
-  return date.toLocaleString("en-US", {
-    month: "2-digit",
-    day: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  });
-}
-
 function Receipt({ order, customerName, onClose }) {
   const lines = getOrderLines(order);
+
+  function formatDate(value) {
+    const d = value?.toDate ? value.toDate() : value instanceof Date ? value : null;
+    if (!d) return "—";
+    return d.toLocaleString(undefined, {
+      month: "2-digit",
+      day: "2-digit",
+      year: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
 
   return (
     <div className="order-modal-overlay" onClick={onClose}>
@@ -1093,14 +958,14 @@ function Receipt({ order, customerName, onClose }) {
         </button>
 
         <div className="receipt__meta-row">
-          <span>{formatTimestamp(order.createdAt)}</span>
+          <span>{formatDate(order.createdAt)}</span>
           <span>Receipt · {order.referenceId}</span>
         </div>
 
         <h2 className="receipt__shop">PEREZ</h2>
         <p className="receipt__tagline">Printing Shop</p>
 
-        <p className="receipt__date">{formatTimestamp(order.createdAt)}</p>
+        <p className="receipt__date">{formatDate(order.createdAt)}</p>
 
         {customerName && (
           <p className="receipt__served">Ordered by: {customerName}</p>
@@ -1241,9 +1106,6 @@ function OrderHistory({ uid, customerName }) {
                   <span className={`order-status order-status--${order.status || "placed"}`}>
                     {statusLabel(order.status)}
                   </span>
-                </div>
-                <div className="order-card__timestamp">
-                  Placed: {formatTimestamp(order.createdAt)}
                 </div>
                 {order.referenceId && (
                   <div className="order-card__ref">Ref: {order.referenceId}</div>
