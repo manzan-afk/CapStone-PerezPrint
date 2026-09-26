@@ -158,16 +158,71 @@
 }
 
 .direct-messages__composer {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
+  display: grid;
+  gap: 8px;
   padding: 12px;
   border-top: 1px solid var(--border, #e2e5ea);
 }
 
-.direct-messages__composer textarea {
+.direct-messages__attachment-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 5px 7px;
+  background: #f8f9fb;
+  border: 1px solid var(--border, #e2e5ea);
+  border-radius: 7px;
+}
+
+.direct-messages__attachment-row > div:first-child {
+  flex: 0 0 auto;
+}
+
+.direct-messages__attachment-row button {
+  min-height: 30px;
+  padding: 0 12px;
+  color: #fff;
+  background: var(--orange, #ff8a1e);
+  border: 0;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.direct-messages__attachment-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  padding-left: 8px;
+}
+
+.direct-messages__attachment-preview span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-dark, #1b2436);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.direct-messages__message-entry {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.direct-messages__message-entry textarea {
   flex: 1;
   min-width: 0;
+  min-height: 44px;
+  max-height: 120px;
   resize: vertical;
   padding: 9px 10px;
   color: var(--text-dark, #1b2436);
@@ -178,7 +233,7 @@
   font-size: 13px;
 }
 
-.direct-messages__composer button {
+.direct-messages__message-entry > button {
   min-height: 38px;
   padding: 0 15px;
   color: #fff;
@@ -219,40 +274,13 @@
   gap: 10px;
 }
 
-.direct-messages__attachments,
-.direct-messages__message-entry {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.direct-messages__message-entry textarea {
-  flex: 1;
-  min-width: 0;
-  min-height: 44px;
-  max-height: 120px;
-  resize: vertical;
-  box-sizing: border-box;
-}
-
-.direct-messages__attachment-preview {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.direct-messages__attachment-preview span {
-  overflow: hidden;
-  max-width: 240px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 @media (max-width: 520px) {
-  .direct-messages__attachments {
-    flex-wrap: wrap;
+  .direct-messages__message-entry {
+    align-items: stretch;
+  }
+
+  .direct-messages__message-entry > button {
+    padding: 0 12px;
   }
 }
   .direct-messages__contacts {

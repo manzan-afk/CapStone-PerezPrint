@@ -7,6 +7,7 @@ import {
   collection,
   doc,
   addDoc,
+  deleteDoc,
   updateDoc,
   getDocs,
   query,
@@ -187,4 +188,13 @@ export async function getAllOrders() {
     id: docSnap.id,
     ...docSnap.data(),
   }));
+}
+
+/**
+ * Deletes an order after it has been picked up (completed).
+ * @param {string} orderId
+ * @returns {Promise<void>}
+ */
+export function deleteOrder(orderId) {
+  return deleteDoc(doc(db, "orders", orderId));
 }

@@ -297,41 +297,45 @@ async function handleSend(event) {
         className="direct-messages__composer"
         onSubmit={handleSend}
       >
-        <MessageFilePicker
-          uid={uid}
-          conversationId={getConversationId(uid, activeUid)}
-          onUploaded={setAttachment}
-        />
+        <div className="direct-messages__attachment-row">
+          <MessageFilePicker
+            uid={uid}
+            conversationId={getConversationId(uid, activeUid)}
+            onUploaded={setAttachment}
+          />
 
-        {attachment && (
-          <div className="direct-messages__attachment-preview">
-            <span>{attachment.name}</span>
-            <button
-              type="button"
-              onClick={() => setAttachment(null)}
-              disabled={sending}
-            >
-              Remove
-            </button>
-          </div>
-        )}
+          {attachment && (
+            <div className="direct-messages__attachment-preview">
+              <span title={attachment.name}>{attachment.name}</span>
+              <button
+                type="button"
+                onClick={() => setAttachment(null)}
+                disabled={sending}
+              >
+                Remove
+              </button>
+            </div>
+          )}
+        </div>
 
-        <textarea
-          aria-label="Write a message"
-          placeholder={`Message ${activeProfile.displayName || "user"}`}
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={handleComposerKeyDown}
-          maxLength={2000}
-          rows={2}
-        />
+        <div className="direct-messages__message-entry">
+          <textarea
+            aria-label="Write a message"
+            placeholder={`Message ${activeProfile.displayName || "user"}`}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={handleComposerKeyDown}
+            maxLength={2000}
+            rows={2}
+          />
 
-        <button
-          type="submit"
-          disabled={(!draft.trim() && !attachment) || sending}
-        >
-          {sending ? "Sending..." : "Send"}
-        </button>
+          <button
+            type="submit"
+            disabled={(!draft.trim() && !attachment) || sending}
+          >
+            {sending ? "Sending..." : "Send"}
+          </button>
+        </div>
       </form>
     </>
   ) : (

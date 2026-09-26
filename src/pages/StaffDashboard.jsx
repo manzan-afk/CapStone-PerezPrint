@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getAllOrders, updateOrderStatus, requestOrderRevision } from "../services/ordersService";
 import DirectMessages from "../components/DirectMessages";
+import PrintableReceipt from "../components/PrintableReceipt";
 import "./StaffDashboard.css";
 
 const ORDER_STATUSES = ["placed", "printing", "ready", "completed", "needs_revision"];
@@ -390,6 +391,7 @@ function OrderManagement() {
   const [savingId, setSavingId] = useState(null);
   const [savedId, setSavedId] = useState(null);
   const [reviewOrder, setReviewOrder] = useState(null);
+  const [receiptOrder, setReceiptOrder] = useState(null);
 
   useEffect(() => {
     loadOrders();
@@ -598,6 +600,15 @@ function OrderManagement() {
                       </button>
                     </>
                   )}
+                  {(order.status === "ready" || order.status === "completed") && (
+                    <button
+                      type="button"
+                      className="ord-print-btn"
+                      onClick={() => setReceiptOrder(order)}
+                    >
+                      Print Receipt
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -612,6 +623,14 @@ function OrderManagement() {
           onClose={() => setReviewOrder(null)}
           onAccept={() => handleAccept(reviewOrder.id)}
           onRequestRevision={(note) => handleRequestRevision(reviewOrder.id, note)}
+        />
+      )}
+
+      {receiptOrder && (
+        <PrintableReceipt
+          order={receiptOrder}
+          customerName={receiptOrder.customerEmail}
+          onClose={() => setReceiptOrder(null)}
         />
       )}
     </div>

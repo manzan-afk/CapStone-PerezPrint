@@ -3,15 +3,16 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getAllUsers, updateUserProfile } from "../services/userServices";
 import { getAllServices, addService, updateService, deleteService } from "../services/servicesService";
-import { getAllOrders, updateOrderStatus } from "../services/ordersService";
+import { getAllOrders, updateOrderStatus, deleteOrder } from "../services/ordersService";
 import DirectMessages from "../components/DirectMessages";
+import PrintableReceipt from "../components/PrintableReceipt";
 import "./AdminDashboard.css";
 
 const ROLES = ["customer", "staff", "admin"];
 
 export default function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [view, setView] = useState("dashboard"); // "dashboard" | "users"
+  const [view, setView] = useState("dashboard");
   const [profileImageFailed, setProfileImageFailed] = useState(false);
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
@@ -128,6 +129,24 @@ export default function AdminDashboard() {
 
           <a
             href="#"
+            className={`nav-item ${view === "reports" ? "nav-item--active" : ""}`}
+            onClick={(e) => {
+              e.preventDefault();
+              setView("reports");
+              setSidebarOpen(false);
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20">
+              <path
+                fill="currentColor"
+                d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm0 2v14h14V5H5Zm2 10h2v2H7v-2Zm4-4h2v6h-2v-6Zm4-3h2v9h-2V8Z"
+              />
+            </svg>
+            Reports
+          </a>
+
+          <a
+            href="#"
             className={`nav-item ${view === "messages" ? "nav-item--active" : ""}`}
             onClick={(e) => {
               e.preventDefault();
@@ -205,6 +224,8 @@ export default function AdminDashboard() {
               ? "Services"
               : view === "orders"
               ? "Orders"
+              : view === "reports"
+              ? "Reports"
               : "Messages"}
           </h2>
         </header>
@@ -216,6 +237,8 @@ export default function AdminDashboard() {
         {view === "services" && <ServicesManagement />}
 
         {view === "orders" && <OrderManagement />}
+
+        {view === "reports" && <ReportsManagement />}
 
         {view === "messages" && (
           <DirectMessages
@@ -446,6 +469,136 @@ function DashboardOverview() {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function ReportsManagement() {
+  const [orders, setOrders] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [services, setServices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function loadReports() {
+      try {
+        const [allOrders, allUsers, allServices] = await Promise.all([
+          getAllOrders(),
+          getAllUsers(),
+          getAllServices(),
+        ]);
+        setOrders(allOrders);
+        setUsers(allUsers);
+        setServices(allServices);
+      } catch (err) {
+        setError("Failed to load reports. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadReports();
+  }, []);
+
+  if (loading) {
+    return <div className="dashboard-content">Loading reports...</div>;
+  }
+
+  const completedOrders = orders.filter((order) => order.status === "completed");
+  const revenue = orders.reduce((sum, order) => sum + (Number(order.totalPrice) || 0), 0);
+  const completedRevenue = completedOrders.reduce(
+    (sum, order) => sum + (Number(order.totalPrice) || 0),
+    0
+  );
+  const customerCount = users.filter((user) => (user.role || "customer") === "customer").length;
+  const statusCounts = ORDER_STATUSES.map((status) => ({
+    status,
+    count: orders.filter((order) => (order.status || "placed") === status).length,
+  }));
+  const serviceRows = services
+    .map((service) => {
+      const matchingOrders = orders.filter((order) =>
+        getOverviewOrderLines(order).some((line) => line.serviceName === service.name)
+      );
+      const serviceRevenue = matchingOrders.reduce(
+        (sum, order) => sum + (Number(order.totalPrice) || 0),
+        0
+      );
+      return { ...service, orderCount: matchingOrders.length, revenue: serviceRevenue };
+    })
+    .sort((a, b) => b.orderCount - a.orderCount || b.revenue - a.revenue);
+
+  return (
+    <div className="dashboard-content">
+      {error && <div className="um-error">{error}</div>}
+
+      <div className="stat-grid report-stat-grid">
+        <div className="stat-card">
+          <span className="stat-card__label">Gross Revenue</span>
+          <span className="stat-card__value">₱{revenue.toFixed(2)}</span>
+          <span className="stat-card__sub">from {orders.length} total orders</span>
+        </div>
+        <div className="stat-card stat-card--accent">
+          <span className="stat-card__label">Completed Revenue</span>
+          <span className="stat-card__value">₱{completedRevenue.toFixed(2)}</span>
+          <span className="stat-card__sub">from {completedOrders.length} completed orders</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-card__label">Average Order Value</span>
+          <span className="stat-card__value">
+            ₱{orders.length ? (revenue / orders.length).toFixed(2) : "0.00"}
+          </span>
+          <span className="stat-card__sub">across all orders</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-card__label">Active Customers</span>
+          <span className="stat-card__value">{customerCount}</span>
+          <span className="stat-card__sub">registered customer accounts</span>
+        </div>
+      </div>
+
+      <div className="report-grid">
+        <section className="report-panel">
+          <h3 className="dashboard-section__title">Order Status</h3>
+          <div className="report-status-list">
+            {statusCounts.map(({ status, count }) => (
+              <div className="report-status-row" key={status}>
+                <span>{statusLabel(status)}</span>
+                <strong>{count}</strong>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="report-panel">
+          <h3 className="dashboard-section__title">Service Performance</h3>
+          {serviceRows.length === 0 ? (
+            <div className="um-empty">No services available.</div>
+          ) : (
+            <div className="um-table-wrap report-table-wrap">
+              <table className="um-table">
+                <thead>
+                  <tr>
+                    <th>Service</th>
+                    <th>Orders</th>
+                    <th>Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {serviceRows.map((service) => (
+                    <tr key={service.id}>
+                      <td>{service.name}</td>
+                      <td className="um-muted">{service.orderCount}</td>
+                      <td className="um-muted">₱{service.revenue.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
@@ -1162,6 +1315,8 @@ function OrderManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [savingId, setSavingId] = useState(null);
   const [savedId, setSavedId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [receiptOrder, setReceiptOrder] = useState(null);
 
   useEffect(() => {
     loadOrders();
@@ -1197,6 +1352,25 @@ function OrderManagement() {
       setError("Failed to update status. Please try again.");
     } finally {
       setSavingId(null);
+    }
+  }
+
+  async function handleDeleteOrder(order) {
+    if (order.status !== "completed") return;
+    const confirmed = window.confirm(
+      `Delete the completed order${order.referenceId ? ` ${order.referenceId}` : ""}? This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setDeletingId(order.id);
+    setError("");
+    try {
+      await deleteOrder(order.id);
+      setOrders((prev) => prev.filter((item) => item.id !== order.id));
+    } catch (err) {
+      setError("Failed to delete order. Please try again.");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -1334,10 +1508,37 @@ function OrderManagement() {
                     ? "Saved ✓"
                     : "Save"}
                 </button>
+                {order.status === "completed" && (
+                  <button
+                    type="button"
+                    className="ord-delete-btn"
+                    onClick={() => handleDeleteOrder(order)}
+                    disabled={deletingId === order.id}
+                  >
+                    {deletingId === order.id ? "Deleting..." : "Delete"}
+                  </button>
+                )}
+                {(order.status === "ready" || order.status === "completed") && (
+                  <button
+                    type="button"
+                    className="ord-print-btn"
+                    onClick={() => setReceiptOrder(order)}
+                  >
+                    Print Receipt
+                  </button>
+                )}
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {receiptOrder && (
+        <PrintableReceipt
+          order={receiptOrder}
+          customerName={receiptOrder.customerEmail}
+          onClose={() => setReceiptOrder(null)}
+        />
       )}
     </div>
   );

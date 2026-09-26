@@ -94,16 +94,6 @@ export default function CustomerDashboard() {
         />
       ),
     },
-    {
-      key: "faqs",
-      label: "FAQs",
-      icon: (
-        <path
-          fill="currentColor"
-          d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm.9 15h-1.8v-1.8h1.8Zm1.86-7.05-.81.83A2.53 2.53 0 0 0 13 12.5V13h-1.8v-.62a3.1 3.1 0 0 1 1.1-2.15l1.1-1.1a1.5 1.5 0 1 0-2.6-1.02H8a3.5 3.5 0 1 1 6.76 1.24Z"
-        />
-      ),
-    },
   ];
 
   const activeLabel = navItems.find((item) => item.key === view)?.label || "Dashboard";
