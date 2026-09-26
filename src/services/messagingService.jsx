@@ -51,11 +51,13 @@ export function subscribeConversations(uid, onConversations, onError) {
         const currentTime = currentConversation?.updatedAt?.toDate?.()?.getTime() || 0;
         const messageTime = data.createdAt?.toDate?.()?.getTime() || 0;
         if (!currentConversation || messageTime >= currentTime) {
-          conversationsById.set(data.conversationId, {
-            id: data.conversationId,
-            lastMessage: data.text || "",
-            updatedAt: data.createdAt,
-          });
+    // ...existing code...
+conversationsById.set(data.conversationId, {
+  id: data.conversationId,
+  lastMessage: data.text || (data.attachment ? `📎 ${data.attachment.name}` : ""),
+  updatedAt: data.createdAt,
+});
+
         }
       });
       const conversations = [...conversationsById.values()];
@@ -94,14 +96,18 @@ export function subscribeDirectMessages(uid, conversationId, onMessages, onError
   );
 }
 
+// ...existing code...
 export async function sendDirectMessage({
   conversationId,
   sender,
   recipient,
   text,
+  attachment = null,
 }) {
-  const trimmedText = text.trim();
-  if (!trimmedText) throw new Error("Message cannot be empty.");
+  const trimmedText = (text || "").trim();
+  if (!trimmedText && !attachment) {
+    throw new Error("Message cannot be empty.");
+  }
   if (sender.id === recipient.id) throw new Error("You cannot message yourself.");
   if (sender.role === "customer" && recipient.role === "customer") {
     throw new Error("Customers can only message staff or administrators.");
@@ -117,6 +123,7 @@ export async function sendDirectMessage({
     recipientName: recipient.name,
     recipientRole: recipient.role,
     text: trimmedText,
+    attachment,
     createdAt: serverTimestamp(),
   });
 }

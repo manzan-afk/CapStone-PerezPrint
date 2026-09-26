@@ -213,7 +213,48 @@
     grid-template-columns: minmax(0, 1fr);
     min-height: 620px;
   }
+.direct-messages__composer {
+  display: grid;
+  align-items: stretch;
+  gap: 10px;
+}
 
+.direct-messages__attachments,
+.direct-messages__message-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.direct-messages__message-entry textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  max-height: 120px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.direct-messages__attachment-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.direct-messages__attachment-preview span {
+  overflow: hidden;
+  max-width: 240px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .direct-messages__attachments {
+    flex-wrap: wrap;
+  }
+}
   .direct-messages__contacts {
     max-height: 190px;
     border-right: 0;

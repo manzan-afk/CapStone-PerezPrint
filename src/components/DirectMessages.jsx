@@ -6,6 +6,7 @@ import {
   subscribeDirectMessages,
   subscribeMessageProfiles,
 } from "../services/messagingService";
+import MessageFilePicker from "./MessageFilePicker";
 import "./DirectMessages.css";
 
 function formatTimestamp(value) {
@@ -30,6 +31,7 @@ export default function DirectMessages({ uid, displayName, role }) {
   const [conversations, setConversations] = useState([]);
   const [activeUid, setActiveUid] = useState("");
   const [messages, setMessages] = useState([]);
+const [attachment, setAttachment] = useState(null);
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState("");
   const [loadingProfiles, setLoadingProfiles] = useState(true);
@@ -121,44 +123,47 @@ export default function DirectMessages({ uid, displayName, role }) {
     });
   const activeProfile = profiles.find((profile) => profile.id === activeUid);
 
-  function selectContact(profile) {
-    setActiveUid(profile.id);
-    setMessages([]);
+function selectContact(profile) {
+  setActiveUid(profile.id);
+  setMessages([]);
+  setDraft("");
+  setAttachment(null);
+  setError("");
+  setLoadingMessages(true);
+}
+
+async function handleSend(event) {
+  event.preventDefault();
+  const text = draft.trim();
+  if ((!text && !attachment) || !activeProfile || sending) return;
+
+  setSending(true);
+  setError("");
+  try {
+    await sendDirectMessage({
+      conversationId: getConversationId(uid, activeProfile.id),
+      sender: { id: uid, name: displayName, role },
+      recipient: {
+        id: activeProfile.id,
+        name: activeProfile.displayName,
+        role: activeProfile.role,
+      },
+      text,
+      attachment,
+    });
     setDraft("");
-    setError("");
-    setLoadingMessages(true);
+    setAttachment(null);
+  } catch (sendError) {
+    console.error("Failed to send message:", sendError);
+    setError(sendError.message === "Customers can only message staff or administrators."
+      ? sendError.message
+      : sendError.code === "permission-denied"
+        ? "Messaging access is not enabled in the Firestore security rules."
+        : "Message could not be sent. Please try again.");
+  } finally {
+    setSending(false);
   }
-
-  async function handleSend(event) {
-    event.preventDefault();
-    const text = draft.trim();
-    if (!text || !activeProfile || sending) return;
-
-    setSending(true);
-    setError("");
-    try {
-      await sendDirectMessage({
-        conversationId: getConversationId(uid, activeProfile.id),
-        sender: { id: uid, name: displayName, role },
-        recipient: {
-          id: activeProfile.id,
-          name: activeProfile.displayName,
-          role: activeProfile.role,
-        },
-        text,
-      });
-      setDraft("");
-    } catch (sendError) {
-      console.error("Failed to send message:", sendError);
-      setError(sendError.message === "Customers can only message staff or administrators."
-        ? sendError.message
-        : sendError.code === "permission-denied"
-          ? "Messaging access is not enabled in the Firestore security rules."
-          : "Message could not be sent. Please try again.");
-    } finally {
-      setSending(false);
-    }
-  }
+}
 
   function handleComposerKeyDown(event) {
     if (event.key !== "Enter" || event.shiftKey) return;
@@ -224,53 +229,121 @@ export default function DirectMessages({ uid, displayName, role }) {
           </div>
         </aside>
 
-        <div className="direct-messages__thread">
-          {activeProfile ? (
-            <>
-              <header className="direct-messages__thread-header">
-                <h2>{activeProfile.displayName || "User"}</h2>
-                <span>{roleLabel(activeProfile.role)}</span>
-              </header>
+<div className="direct-messages__thread">
+  {activeProfile ? (
+    <>
+      <header className="direct-messages__thread-header">
+        <h2>{activeProfile.displayName || "User"}</h2>
+        <span>{roleLabel(activeProfile.role)}</span>
+      </header>
 
-              <div className="direct-messages__history" aria-live="polite">
-                {loadingMessages ? (
-                  <p className="direct-messages__empty">Loading conversation...</p>
-                ) : messages.length === 0 ? (
-                  <p className="direct-messages__empty">Start the conversation.</p>
-                ) : messages.map((message) => (
-                  <div
-                    className={`direct-messages__message ${message.senderId === uid ? "direct-messages__message--sent" : "direct-messages__message--received"}`}
-                    key={message.id}
-                  >
-                    <p>{message.text}</p>
-                    <time>{formatTimestamp(message.createdAt)}</time>
-                  </div>
-                ))}
-              </div>
+      <div className="direct-messages__history" aria-live="polite">
+        {loadingMessages ? (
+          <p className="direct-messages__empty">
+            Loading conversation...
+          </p>
+        ) : messages.length === 0 ? (
+          <p className="direct-messages__empty">
+            Start the conversation.
+          </p>
+        ) : (
+          messages.map((message) => (
+            <div
+              className={`direct-messages__message ${
+                message.senderId === uid
+                  ? "direct-messages__message--sent"
+                  : "direct-messages__message--received"
+              }`}
+              key={message.id}
+            >
+              {message.text && <p>{message.text}</p>}
 
-              <form className="direct-messages__composer" onSubmit={handleSend}>
-                <textarea
-                  aria-label="Write a message"
-                  placeholder={`Message ${activeProfile.displayName || "user"}`}
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  onKeyDown={handleComposerKeyDown}
-                  maxLength={2000}
-                  rows={2}
-                />
-                <button type="submit" disabled={!draft.trim() || sending}>
-                  {sending ? "Sending..." : "Send"}
-                </button>
-              </form>
-            </>
-          ) : (
-            <div className="direct-messages__welcome">
-              <h2>Your messages</h2>
-              <p>Select a person to open a conversation.</p>
+              {message.attachment && (
+                <div className="direct-messages__message-attachment">
+                  {message.attachment.type?.startsWith("image/") ? (
+                    <a
+                      href={message.attachment.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <img
+                        src={message.attachment.url}
+                        alt={message.attachment.name || "Attachment"}
+                        style={{
+                          maxWidth: "220px",
+                          borderRadius: "8px",
+                        }}
+                      />
+                    </a>
+                  ) : (
+                    <a
+                      href={message.attachment.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {message.attachment.name || "Open attachment"}
+                    </a>
+                  )}
+                </div>
+              )}
+
+              <time>{formatTimestamp(message.createdAt)}</time>
             </div>
-          )}
-        </div>
+          ))
+        )}
+      </div>
+
+      <form
+        className="direct-messages__composer"
+        onSubmit={handleSend}
+      >
+        <MessageFilePicker
+          uid={uid}
+          conversationId={getConversationId(uid, activeUid)}
+          onUploaded={setAttachment}
+        />
+
+        {attachment && (
+          <div className="direct-messages__attachment-preview">
+            <span>{attachment.name}</span>
+            <button
+              type="button"
+              onClick={() => setAttachment(null)}
+              disabled={sending}
+            >
+              Remove
+            </button>
+          </div>
+        )}
+
+        <textarea
+          aria-label="Write a message"
+          placeholder={`Message ${activeProfile.displayName || "user"}`}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={handleComposerKeyDown}
+          maxLength={2000}
+          rows={2}
+        />
+
+        <button
+          type="submit"
+          disabled={(!draft.trim() && !attachment) || sending}
+        >
+          {sending ? "Sending..." : "Send"}
+        </button>
+      </form>
+    </>
+  ) : (
+    <div className="direct-messages__welcome">
+      <h2>Your messages</h2>
+      <p>Select a person to open a conversation.</p>
+    </div>
+  )}
+</div>
       </section>
     </div>
   );
+  
+
 }
