@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import { auth } from "../firebase-config";
-import { getUserProfile, syncMessageProfile } from "../services/userServices";
+import { getUserProfile } from "../services/userServices";
 
 const AuthContext = createContext(null);
 
@@ -19,13 +19,6 @@ export function AuthProvider({ children }) {
         const fetchedProfile = await getUserProfile(currentUser.uid);
         setProfile(fetchedProfile);
         setRole(fetchedProfile?.role ?? "customer");
-        if (fetchedProfile) {
-          try {
-            await syncMessageProfile(currentUser.uid, fetchedProfile);
-          } catch (error) {
-            console.error("Failed to sync messaging profile:", error);
-          }
-        }
       } else {
         setProfile(null);
         setRole(null);

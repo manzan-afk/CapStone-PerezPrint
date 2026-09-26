@@ -82,6 +82,11 @@
   -webkit-line-clamp: 2;
 }
 
+.direct-messages__contact-time {
+  color: var(--text-muted, #8a92a3);
+  font-size: 10px;
+}
+
 .direct-messages__thread {
   display: flex;
   flex-direction: column;

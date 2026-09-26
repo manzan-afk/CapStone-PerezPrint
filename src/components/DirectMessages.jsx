@@ -66,14 +66,25 @@ export default function DirectMessages({ uid, displayName, role }) {
     if (!uid || !activeUid) return undefined;
 
     const conversationId = getConversationId(uid, activeUid);
-    return subscribeDirectMessages(
+    const loadingTimeout = window.setTimeout(() => {
+      setLoadingMessages((isLoading) => {
+        if (isLoading) {
+          setError("The conversation is taking too long to load. Check your Firestore connection and security rules.");
+        }
+        return false;
+      });
+    }, 8000);
+    const stopMessages = subscribeDirectMessages(
+      uid,
       conversationId,
       (nextMessages) => {
+        window.clearTimeout(loadingTimeout);
         setMessages(nextMessages);
         setLoadingMessages(false);
         setError("");
       },
       (subscriptionError) => {
+        window.clearTimeout(loadingTimeout);
         console.error("Failed to load conversation:", subscriptionError);
         setError(subscriptionError.code === "permission-denied"
           ? "Messaging access is not enabled in the Firestore security rules."
@@ -81,6 +92,10 @@ export default function DirectMessages({ uid, displayName, role }) {
         setLoadingMessages(false);
       }
     );
+    return () => {
+      window.clearTimeout(loadingTimeout);
+      stopMessages();
+    };
   }, [activeUid, uid]);
 
   const conversationsById = new Map(conversations.map((conversation) => [
@@ -89,6 +104,7 @@ export default function DirectMessages({ uid, displayName, role }) {
   ]));
   const visibleProfiles = profiles
     .filter((profile) => profile.id !== uid)
+    .filter((profile) => role !== "customer" || profile.role !== "customer")
     .filter((profile) => {
       const searchValue = search.trim().toLowerCase();
       return !searchValue
@@ -134,11 +150,22 @@ export default function DirectMessages({ uid, displayName, role }) {
       setDraft("");
     } catch (sendError) {
       console.error("Failed to send message:", sendError);
-      setError(sendError.code === "permission-denied"
-        ? "Messaging access is not enabled in the Firestore security rules."
-        : "Message could not be sent. Please try again.");
+      setError(sendError.message === "Customers can only message staff or administrators."
+        ? sendError.message
+        : sendError.code === "permission-denied"
+          ? "Messaging access is not enabled in the Firestore security rules."
+          : "Message could not be sent. Please try again.");
     } finally {
       setSending(false);
+    }
+  }
+
+  function handleComposerKeyDown(event) {
+    if (event.key !== "Enter" || event.shiftKey) return;
+
+    event.preventDefault();
+    if (event.currentTarget.form) {
+      event.currentTarget.form.requestSubmit();
     }
   }
 
@@ -186,6 +213,11 @@ export default function DirectMessages({ uid, displayName, role }) {
                     {roleLabel(profile.role)}
                     {conversation?.lastMessage ? ` · ${conversation.lastMessage}` : ""}
                   </span>
+                  {conversation?.updatedAt && (
+                    <time className="direct-messages__contact-time">
+                      {formatTimestamp(conversation.updatedAt)}
+                    </time>
+                  )}
                 </button>
               );
             })}
@@ -222,6 +254,7 @@ export default function DirectMessages({ uid, displayName, role }) {
                   placeholder={`Message ${activeProfile.displayName || "user"}`}
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={handleComposerKeyDown}
                   maxLength={2000}
                   rows={2}
                 />

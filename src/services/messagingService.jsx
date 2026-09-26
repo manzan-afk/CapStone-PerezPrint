@@ -1,12 +1,10 @@
 import {
+  addDoc,
   collection,
-  doc,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   where,
-  writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase-config";
 
@@ -19,26 +17,48 @@ export function getConversationId(firstUid, secondUid) {
 
 export function subscribeMessageProfiles(onProfiles, onError) {
   return onSnapshot(
-    collection(db, "messageProfiles"),
+    collection(db, "users"),
     (snapshot) => {
-      onProfiles(snapshot.docs.map((profile) => ({ id: profile.id, ...profile.data() })));
+      onProfiles(snapshot.docs.map((profile) => {
+        const data = profile.data();
+        return {
+          id: profile.id,
+          displayName: [data.firstName, data.lastName].filter(Boolean).join(" ")
+            || data.email?.split("@")[0]
+            || "User",
+          role: data.role || "customer",
+        };
+      }));
     },
     onError
   );
 }
 
 export function subscribeConversations(uid, onConversations, onError) {
-  const conversationsQuery = query(
-    collection(db, "conversations"),
+  const messagesQuery = query(
+    collection(db, "messages"),
     where("participants", "array-contains", uid)
   );
   return onSnapshot(
-    conversationsQuery,
+    messagesQuery,
     (snapshot) => {
-      const conversations = snapshot.docs.map((conversation) => ({
-        id: conversation.id,
-        ...conversation.data(),
-      }));
+      const conversationsById = new Map();
+      snapshot.docs.forEach((message) => {
+        const data = message.data();
+        if (!data.conversationId) return;
+
+        const currentConversation = conversationsById.get(data.conversationId);
+        const currentTime = currentConversation?.updatedAt?.toDate?.()?.getTime() || 0;
+        const messageTime = data.createdAt?.toDate?.()?.getTime() || 0;
+        if (!currentConversation || messageTime >= currentTime) {
+          conversationsById.set(data.conversationId, {
+            id: data.conversationId,
+            lastMessage: data.text || "",
+            updatedAt: data.createdAt,
+          });
+        }
+      });
+      const conversations = [...conversationsById.values()];
       conversations.sort((first, second) => {
         const firstTime = first.updatedAt?.toDate?.()?.getTime() || 0;
         const secondTime = second.updatedAt?.toDate?.()?.getTime() || 0;
@@ -50,18 +70,25 @@ export function subscribeConversations(uid, onConversations, onError) {
   );
 }
 
-export function subscribeDirectMessages(conversationId, onMessages, onError) {
+export function subscribeDirectMessages(uid, conversationId, onMessages, onError) {
   const messagesQuery = query(
-    collection(db, "conversations", conversationId, "messages"),
-    orderBy("createdAt", "asc")
+    collection(db, "messages"),
+    where("conversationId", "==", conversationId),
+    where("participants", "array-contains", uid)
   );
   return onSnapshot(
     messagesQuery,
     (snapshot) => {
-      onMessages(snapshot.docs.map((message) => ({
+      const messages = snapshot.docs.map((message) => ({
         id: message.id,
         ...message.data(),
-      })));
+      }));
+      messages.sort((first, second) => {
+        const firstTime = first.createdAt?.toDate?.()?.getTime() || 0;
+        const secondTime = second.createdAt?.toDate?.()?.getTime() || 0;
+        return firstTime - secondTime;
+      });
+      onMessages(messages);
     },
     onError
   );
@@ -76,31 +103,20 @@ export async function sendDirectMessage({
   const trimmedText = text.trim();
   if (!trimmedText) throw new Error("Message cannot be empty.");
   if (sender.id === recipient.id) throw new Error("You cannot message yourself.");
+  if (sender.role === "customer" && recipient.role === "customer") {
+    throw new Error("Customers can only message staff or administrators.");
+  }
 
-  const conversationRef = doc(db, "conversations", conversationId);
-  const messageRef = doc(collection(conversationRef, "messages"));
-  const batch = writeBatch(db);
-
-  batch.set(conversationRef, {
+  await addDoc(collection(db, "messages"), {
+    conversationId,
     participants: [sender.id, recipient.id].sort(),
-    participantNames: {
-      [sender.id]: sender.name,
-      [recipient.id]: recipient.name,
-    },
-    participantRoles: {
-      [sender.id]: sender.role,
-      [recipient.id]: recipient.role,
-    },
-    lastMessage: trimmedText,
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
-
-  batch.set(messageRef, {
     senderId: sender.id,
     senderName: sender.name,
+    senderRole: sender.role,
+    recipientId: recipient.id,
+    recipientName: recipient.name,
+    recipientRole: recipient.role,
     text: trimmedText,
     createdAt: serverTimestamp(),
   });
-
-  await batch.commit();
 }

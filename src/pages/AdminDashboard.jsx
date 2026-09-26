@@ -12,6 +12,7 @@ const ROLES = ["customer", "staff", "admin"];
 export default function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [view, setView] = useState("dashboard"); // "dashboard" | "users"
+  const [profileImageFailed, setProfileImageFailed] = useState(false);
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
 
@@ -147,8 +148,13 @@ export default function AdminDashboard() {
         <div className="sidebar__footer">
           <div className="user-info">
             <div className="user-avatar">
-              {user?.photoURL ? (
-                <img src={user.photoURL} alt="Profile photo" className="user-avatar-img" />
+              {user?.photoURL && !profileImageFailed ? (
+                <img
+                  src={user.photoURL}
+                  alt="Profile photo"
+                  className="user-avatar-img"
+                  onError={() => setProfileImageFailed(true)}
+                />
               ) : (
                 <svg viewBox="0 0 24 24" width="22" height="22">
                   <path
@@ -944,6 +950,13 @@ function ServiceModal({ initialService, onClose, onSaved }) {
     }
   }
 
+  function handleDescriptionKeyDown(event) {
+    if (event.key !== "Enter" || event.shiftKey) return;
+
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
+  }
+
   return (
     <div className="order-modal-overlay" onClick={onClose}>
       <div className="order-modal service-modal" onClick={(e) => e.stopPropagation()}>
@@ -993,6 +1006,7 @@ function ServiceModal({ initialService, onClose, onSaved }) {
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              onKeyDown={handleDescriptionKeyDown}
             />
           </div>
 
@@ -1145,6 +1159,7 @@ function OrderManagement() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [savingId, setSavingId] = useState(null);
   const [savedId, setSavedId] = useState(null);
 
@@ -1197,6 +1212,23 @@ function OrderManagement() {
     });
   }
 
+  const filteredOrders = orders.filter((order) => {
+    const searchValue = searchTerm.trim().toLowerCase();
+    if (!searchValue) return true;
+
+    const orderLines = getOverviewOrderLines(order)
+      .map((line) => `${line.serviceName} ${line.varietyName || ""}`)
+      .join(" ");
+    return [
+      order.referenceId,
+      order.customerEmail,
+      order.status,
+      order.description,
+      order.serviceName,
+      orderLines,
+    ].some((value) => value?.toLowerCase().includes(searchValue));
+  });
+
   if (loading) {
     return <div className="dashboard-content">Loading orders...</div>;
   }
@@ -1205,11 +1237,32 @@ function OrderManagement() {
     <div className="dashboard-content">
       {error && <div className="um-error">{error}</div>}
 
+      <div className="um-toolbar">
+        <div className="um-search">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path
+              d="m21 21-4.3-4.3m2.3-5.2a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z"
+              stroke="currentColor"
+              strokeWidth="2"
+              fill="none"
+            />
+          </svg>
+          <input
+            type="search"
+            placeholder="Search orders..."
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+          />
+        </div>
+      </div>
+
       {orders.length === 0 ? (
         <div className="um-empty">No orders have been placed yet.</div>
+      ) : filteredOrders.length === 0 ? (
+        <div className="um-empty">No orders match your search.</div>
       ) : (
         <div className="ord-list">
-          {orders.map((order) => (
+          {filteredOrders.map((order) => (
             <div key={order.id} className="ord-card">
               <div className="ord-card__header">
                 <div>

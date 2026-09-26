@@ -14,6 +14,7 @@ import "./CustomerDashboard.css";
 export default function CustomerDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [view, setView] = useState("dashboard"); // "dashboard" | "services" | "orders" | ...
+  const [profileImageFailed, setProfileImageFailed] = useState(false);
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
 
@@ -75,7 +76,7 @@ export default function CustomerDashboard() {
     },
     {
       key: "pickup",
-      label: "Pickup Schedule",
+      label: "Pickup",
       icon: (
         <path
           fill="currentColor"
@@ -162,8 +163,13 @@ export default function CustomerDashboard() {
         <div className="sidebar__footer">
           <div className="user-info">
             <div className="user-avatar">
-              {user?.photoURL ? (
-                <img src={user.photoURL} alt="Profile photo" className="user-avatar-img" />
+              {user?.photoURL && !profileImageFailed ? (
+                <img
+                  src={user.photoURL}
+                  alt="Profile photo"
+                  className="user-avatar-img"
+                  onError={() => setProfileImageFailed(true)}
+                />
               ) : (
                 <svg viewBox="0 0 24 24" width="22" height="22">
                   <path
@@ -221,6 +227,7 @@ export default function CustomerDashboard() {
             }
             onGoToServices={() => setView("services")}
             onGoToOrders={() => setView("orders")}
+            onGoToSchedule={() => setView("pickup")}
           />
         )}
 
@@ -250,6 +257,8 @@ export default function CustomerDashboard() {
 
         {view === "notifications" && <OrderNotifications uid={user?.uid} />}
 
+        {view === "pickup" && <PickupSchedule uid={user?.uid} />}
+
         {view === "messages" && (
           <DirectMessages
             uid={user?.uid}
@@ -258,12 +267,100 @@ export default function CustomerDashboard() {
           />
         )}
 
-        {view !== "dashboard" && view !== "services" && view !== "orders" && view !== "notifications" && view !== "messages" && (
+        {view !== "dashboard" && view !== "services" && view !== "orders" && view !== "notifications" && view !== "pickup" && view !== "messages" && (
           <div className="dashboard-content dashboard-content--empty">
             Coming soon.
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function PickupSchedule({ uid }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!uid) return undefined;
+
+    return subscribeUserOrders(
+      uid,
+      (userOrders) => {
+        setOrders(userOrders);
+        setError("");
+        setLoading(false);
+      },
+      () => {
+        setError("Failed to load your schedule. Please refresh and try again.");
+        setLoading(false);
+      }
+    );
+  }, [uid]);
+
+  if (loading) {
+    return <div className="dashboard-content">Loading your schedule...</div>;
+  }
+
+  const readyOrders = orders
+    .filter((order) => order.status === "ready")
+    .sort((first, second) => {
+      const firstTime = first.pickupReadyAt?.toDate?.()?.getTime() || 0;
+      const secondTime = second.pickupReadyAt?.toDate?.()?.getTime() || 0;
+      return secondTime - firstTime;
+    });
+
+  return (
+    <div className="dashboard-content">
+      {error && <div className="um-error">{error}</div>}
+
+      {readyOrders.length === 0 ? (
+        <div className="um-empty">No orders are ready for pickup yet.</div>
+      ) : (
+        <div className="order-notifications" aria-live="polite">
+          {readyOrders.map((order) => {
+            const lines = getOrderLines(order);
+            return (
+              <article className="order-notification" key={order.id}>
+                <div className="order-notification__header">
+                  <h3>Ready for pickup</h3>
+                  <time>{formatTimestamp(order.pickupReadyAt || order.statusUpdatedAt)}</time>
+                </div>
+                <p>Please bring your tracking number when collecting this order.</p>
+                <dl className="order-notification__details">
+                  <div>
+                    <dt>Tracking number</dt>
+                    <dd>{order.referenceId || "Not available"}</dd>
+                  </div>
+                  <div>
+                    <dt>Order details</dt>
+                    <dd>
+                      {lines.length > 0
+                        ? lines.map((line) => (
+                          `${line.serviceName}${line.varietyName ? ` (${line.varietyName})` : ""} x${line.quantity || 1}`
+                        )).join(", ")
+                        : "Order details unavailable"}
+                    </dd>
+                  </div>
+                  {order.description && (
+                    <div>
+                      <dt>Specifications</dt>
+                      <dd>{order.description}</dd>
+                    </div>
+                  )}
+                  {order.totalPrice != null && (
+                    <div>
+                      <dt>Total</dt>
+                      <dd>₱{Number(order.totalPrice).toFixed(2)}</dd>
+                    </div>
+                  )}
+                </dl>
+              </article>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -386,7 +483,7 @@ function OrderNotifications({ uid }) {
   );
 }
 
-function CustomerOverview({ uid, displayName, customerName, onGoToServices, onGoToOrders }) {
+function CustomerOverview({ uid, displayName, customerName, onGoToServices, onGoToOrders, onGoToSchedule }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -458,8 +555,8 @@ function CustomerOverview({ uid, displayName, customerName, onGoToServices, onGo
             🎉 You have {readyForPickup.length} order
             {readyForPickup.length > 1 ? "s" : ""} ready for pickup!
           </span>
-          <button type="button" className="pickup-banner__btn" onClick={onGoToOrders}>
-            View Orders
+          <button type="button" className="pickup-banner__btn" onClick={onGoToSchedule}>
+            View Schedule
           </button>
         </div>
       )}
@@ -866,6 +963,13 @@ function OrderCartModal({ initialService, allServices, uid, email, customerName,
     }
   }
 
+  function handleDescriptionKeyDown(event) {
+    if (event.key !== "Enter" || event.shiftKey) return;
+
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
+  }
+
   if (placedOrder) {
     return (
       <Receipt
@@ -992,6 +1096,7 @@ function OrderCartModal({ initialService, allServices, uid, email, customerName,
             rows={4}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            onKeyDown={handleDescriptionKeyDown}
           />
           <div className="field-error">{descriptionError}</div>
 
@@ -1158,6 +1263,7 @@ function OrderHistory({ uid, customerName }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
 
   useEffect(() => {
@@ -1199,6 +1305,22 @@ function OrderHistory({ uid, customerName }) {
     }
   }
 
+  const filteredOrders = orders.filter((order) => {
+    const searchValue = searchTerm.trim().toLowerCase();
+    if (!searchValue) return true;
+
+    const orderLines = getOrderLines(order)
+      .map((line) => `${line.serviceName} ${line.varietyName || ""}`)
+      .join(" ");
+    return [
+      order.referenceId,
+      order.status,
+      order.description,
+      order.serviceName,
+      orderLines,
+    ].some((value) => value?.toLowerCase().includes(searchValue));
+  });
+
   if (loading) {
     return <div className="dashboard-content">Loading your orders...</div>;
   }
@@ -1207,14 +1329,32 @@ function OrderHistory({ uid, customerName }) {
     <div className="dashboard-content">
       {error && <div className="um-error">{error}</div>}
 
+      <div className="order-search">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path
+            d="m21 21-4.3-4.3m2.3-5.2a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z"
+            stroke="currentColor"
+            strokeWidth="2"
+            fill="none"
+          />
+        </svg>
+        <input
+          type="search"
+          placeholder="Search your orders..."
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+        />
+      </div>
+
       {orders.length === 0 ? (
         <div className="um-empty">
           You haven't placed any orders yet. Browse Services to get started.
         </div>
-      )
-       : (
+      ) : filteredOrders.length === 0 ? (
+        <div className="um-empty">No orders match your search.</div>
+      ) : (
         <div className="order-history">
-          {orders.map((order) => {
+          {filteredOrders.map((order) => {
             const lines = getOrderLines(order);
             const summary =
               lines.length > 1
