@@ -82,6 +82,12 @@ export default function PrintableReceipt({ order, customerName, onClose }) {
           </span>
         </div>
 
+        {order.status === "completed" && (
+          <p className="printable-receipt__screenshot-hint printable-receipt__no-print">
+            Take a screenshot of this receipt for your records.
+          </p>
+        )}
+
         <p className="printable-receipt__thanks">Thank you for your business!</p>
 
         <div className="printable-receipt__actions printable-receipt__no-print">

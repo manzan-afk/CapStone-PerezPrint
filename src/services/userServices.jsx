@@ -2,7 +2,7 @@
 // Handles reading/writing user profile data in Firestore, keyed by
 // the Firebase Auth UID (see authService.jsx for authentication itself).
 
-import { doc, getDoc, getDocs, collection, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, getDocs, collection, onSnapshot, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase-config";
 
 /**
@@ -16,7 +16,24 @@ export function createUserProfile(uid, data) {
   return setDoc(doc(db, "users", uid), {
     ...data,
     createdAt: serverTimestamp(),
+    orderNotificationsViewedAt: serverTimestamp(),
   });
+}
+
+export function subscribeUserProfile(uid, onProfile, onError) {
+  return onSnapshot(
+    doc(db, "users", uid),
+    (snapshot) => onProfile(snapshot.exists() ? snapshot.data() : null),
+    onError
+  );
+}
+
+export function markOrderNotificationsViewed(uid) {
+  return setDoc(
+    doc(db, "users", uid),
+    { orderNotificationsViewedAt: serverTimestamp() },
+    { merge: true }
+  );
 }
 
 /**

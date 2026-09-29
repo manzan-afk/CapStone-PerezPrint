@@ -2,7 +2,14 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getAllOrders, updateOrderStatus, requestOrderRevision } from "../services/ordersService";
+import {
+  markAllUnreadMessagesRead,
+  sendOrderRevisionMessage,
+} from "../services/messagingService";
 import DirectMessages from "../components/DirectMessages";
+import UnreadMessageBadge from "../components/UnreadMessageBadge";
+import SidebarCountBadge from "../components/SidebarCountBadge";
+import useSidebarOrderCounts from "../hooks/useSidebarOrderCounts";
 import PrintableReceipt from "../components/PrintableReceipt";
 import "./StaffDashboard.css";
 
@@ -31,6 +38,7 @@ export default function StaffDashboard() {
   const [profileImageFailed, setProfileImageFailed] = useState(false);
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
+  const orderCounts = useSidebarOrderCounts(user?.uid, "staff");
 
   async function handleLogout() {
     await logout();
@@ -134,12 +142,24 @@ export default function StaffDashboard() {
                 e.preventDefault();
                 setView(item.key);
                 setSidebarOpen(false);
+                if (item.key === "messages" && user?.uid) {
+                  markAllUnreadMessagesRead(user.uid).catch((error) => {
+                    console.error("Failed to mark messages as read:", error);
+                  });
+                }
               }}
             >
               <svg viewBox="0 0 24 24" width="20" height="20">
                 {item.icon}
               </svg>
               {item.label}
+              {item.key === "orders" && (
+                <SidebarCountBadge count={orderCounts.ordersNeedingAction} label="orders needing action" />
+              )}
+              {item.key === "pickup" && (
+                <SidebarCountBadge count={orderCounts.readyPickups} label="ready pickups" />
+              )}
+              {item.key === "messages" && <UnreadMessageBadge uid={user?.uid} />}
             </a>
           ))}
         </nav>
@@ -209,7 +229,15 @@ export default function StaffDashboard() {
           />
         )}
 
-        {view === "orders" && <OrderManagement />}
+        {view === "orders" && (
+          <OrderManagement
+            sender={{
+              id: user?.uid,
+              name: `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim() || user?.email || "Staff",
+              role: profile?.role || "staff",
+            }}
+          />
+        )}
 
         {view === "messages" && (
           <DirectMessages
@@ -383,7 +411,7 @@ function StaffOverview({ displayName, onGoToOrders }) {
   );
 }
 
-function OrderManagement() {
+function OrderManagement({ sender }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -411,17 +439,49 @@ function OrderManagement() {
   }
 
   function handleStatusChange(orderId, newStatus) {
+    setError("");
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
     );
   }
 
+  function handleRevisionNoteChange(orderId, note) {
+    setError("");
+    setOrders((prev) =>
+      prev.map((order) => (order.id === orderId ? { ...order, staffNote: note } : order))
+    );
+  }
+
   async function handleSaveStatus(orderId, status) {
+    const revisionNote = orders.find((order) => order.id === orderId)?.staffNote?.trim();
+    if (status === "needs_revision" && !revisionNote) {
+      setError("Enter the problem details before setting this order to Needs Revision.");
+      return;
+    }
+
     setSavingId(orderId);
     setSavedId(null);
     try {
-      await updateOrderStatus(orderId, status);
+      if (status === "needs_revision") {
+        await requestOrderRevision(orderId, revisionNote);
+        try {
+          await sendOrderRevisionMessage({
+            order: orders.find((order) => order.id === orderId),
+            sender,
+            note: revisionNote,
+          });
+        } catch (messageError) {
+          console.error("Failed to message customer about order revision:", messageError);
+          setError("Revision saved, but the direct message could not be sent. The customer can still see the note in Notifications.");
+        }
+      } else {
+        await updateOrderStatus(orderId, status);
+      }
       setSavedId(orderId);
+      if (status === "completed") {
+        const completedOrder = orders.find((order) => order.id === orderId);
+        if (completedOrder) setReceiptOrder({ ...completedOrder, status });
+      }
       setTimeout(() => setSavedId(null), 2000);
     } catch (err) {
       setError("Failed to update status. Please try again.");
@@ -449,11 +509,18 @@ function OrderManagement() {
     setSavingId(orderId);
     try {
       await requestOrderRevision(orderId, note);
+      const order = orders.find((item) => item.id === orderId);
       setOrders((prev) =>
         prev.map((o) =>
           o.id === orderId ? { ...o, status: "needs_revision", staffNote: note } : o
         )
       );
+      try {
+        await sendOrderRevisionMessage({ order, sender, note });
+      } catch (messageError) {
+        console.error("Failed to message customer about order revision:", messageError);
+        setError("Revision saved, but the direct message could not be sent. The customer can still see the note in Notifications.");
+      }
       setReviewOrder(null);
     } catch (err) {
       setError("Failed to send revision request. Please try again.");
@@ -590,7 +657,10 @@ function OrderManagement() {
                       <button
                         className="um-save-btn"
                         onClick={() => handleSaveStatus(order.id, order.status || "placed")}
-                        disabled={savingId === order.id}
+                        disabled={
+                          savingId === order.id ||
+                          (order.status === "needs_revision" && !order.staffNote?.trim())
+                        }
                       >
                         {savingId === order.id
                           ? "Saving..."
@@ -610,6 +680,18 @@ function OrderManagement() {
                     </button>
                   )}
                 </div>
+                {order.status === "needs_revision" && (
+                  <div className="ord-revision-field">
+                    <label htmlFor={`staff-revision-note-${order.id}`}>Problem with the order</label>
+                    <textarea
+                      id={`staff-revision-note-${order.id}`}
+                      value={order.staffNote || ""}
+                      onChange={(event) => handleRevisionNoteChange(order.id, event.target.value)}
+                      placeholder="Describe what needs to be corrected..."
+                      required
+                    />
+                  </div>
+                )}
               </div>
             );
           })}

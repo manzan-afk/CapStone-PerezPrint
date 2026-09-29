@@ -463,6 +463,36 @@
   border-top: 1px solid var(--border);
 }
 
+.ord-revision-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.ord-revision-field label {
+  color: var(--text-dark);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ord-revision-field textarea {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 9px 11px;
+  color: var(--text-dark);
+  font: inherit;
+  font-size: 13px;
+}
+
+.ord-revision-field textarea:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 1px;
+}
+
 .ord-print-btn {
   background: var(--navy);
   color: var(--white);

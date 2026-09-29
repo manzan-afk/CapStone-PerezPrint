@@ -2,10 +2,24 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getAllUsers, updateUserProfile } from "../services/userServices";
-import { getAllServices, addService, updateService, deleteService } from "../services/servicesService";
-import { getAllOrders, updateOrderStatus, deleteOrder } from "../services/ordersService";
+import {
+  getAllServices,
+  getAllServiceCategories,
+  addServiceCategory,
+  addService,
+  updateService,
+  deleteService,
+} from "../services/servicesService";
+import { getAllOrders, updateOrderStatus, requestOrderRevision, deleteOrder } from "../services/ordersService";
+import {
+  markAllUnreadMessagesRead,
+  sendOrderRevisionMessage,
+} from "../services/messagingService";
 import DirectMessages from "../components/DirectMessages";
 import PrintableReceipt from "../components/PrintableReceipt";
+import UnreadMessageBadge from "../components/UnreadMessageBadge";
+import SidebarCountBadge from "../components/SidebarCountBadge";
+import useSidebarOrderCounts from "../hooks/useSidebarOrderCounts";
 import "./AdminDashboard.css";
 
 const ROLES = ["customer", "staff", "admin"];
@@ -16,6 +30,7 @@ export default function AdminDashboard() {
   const [profileImageFailed, setProfileImageFailed] = useState(false);
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
+  const orderCounts = useSidebarOrderCounts(user?.uid, "admin");
 
   async function handleLogout() {
     await logout();
@@ -125,6 +140,7 @@ export default function AdminDashboard() {
               />
             </svg>
             Orders
+            <SidebarCountBadge count={orderCounts.ordersNeedingAction} label="orders needing action" />
           </a>
 
           <a
@@ -152,6 +168,11 @@ export default function AdminDashboard() {
               e.preventDefault();
               setView("messages");
               setSidebarOpen(false);
+              if (user?.uid) {
+                markAllUnreadMessagesRead(user.uid).catch((error) => {
+                  console.error("Failed to mark messages as read:", error);
+                });
+              }
             }}
           >
             <svg viewBox="0 0 24 24" width="20" height="20">
@@ -161,6 +182,7 @@ export default function AdminDashboard() {
               />
             </svg>
             Messages
+            <UnreadMessageBadge uid={user?.uid} />
           </a>
         </nav>
 
@@ -230,13 +252,21 @@ export default function AdminDashboard() {
           </h2>
         </header>
 
-        {view === "dashboard" && <DashboardOverview />}
+        {view === "dashboard" && <DashboardOverview onNavigate={setView} />}
 
         {view === "users" && <UserManagement currentUid={user?.uid} />}
 
         {view === "services" && <ServicesManagement />}
 
-        {view === "orders" && <OrderManagement />}
+        {view === "orders" && (
+          <OrderManagement
+            sender={{
+              id: user?.uid,
+              name: `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim() || user?.email || "Admin",
+              role: profile?.role || "admin",
+            }}
+          />
+        )}
 
         {view === "reports" && <ReportsManagement />}
 
@@ -274,7 +304,7 @@ function getOverviewOrderLines(order) {
   return [];
 }
 
-function DashboardOverview() {
+function DashboardOverview({ onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [users, setUsers] = useState([]);
@@ -353,7 +383,12 @@ function DashboardOverview() {
 
       {/* Stat cards */}
       <div className="stat-grid">
-        <div className="stat-card">
+        <button
+          type="button"
+          className="stat-card stat-card--interactive"
+          onClick={() => onNavigate("users")}
+          aria-label="Open User Management"
+        >
           <div className="stat-card__icon stat-card__icon--users">
             <svg viewBox="0 0 24 24" width="18" height="18">
               <path fill="currentColor" d="M16 11c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3Zm-8 0c1.7 0 3-1.3 3-3S9.7 5 8 5 5 6.3 5 8s1.3 3 3 3Zm0 2c-2.3 0-7 1.2-7 3.5V19h9v-2.5c0-.9.3-2 .9-2.9C10.1 13.2 8.9 13 8 13Zm8 0c-.3 0-.6 0-.9.1.7 1 1 2.2 1 3.4V19h7v-2.5c0-2.3-4.7-3.5-7-3.5Z"/>
@@ -364,9 +399,14 @@ function DashboardOverview() {
           <span className="stat-card__sub">
             {customerCount} customers · {staffCount} staff · {adminCount} admin
           </span>
-        </div>
+        </button>
 
-        <div className="stat-card">
+        <button
+          type="button"
+          className="stat-card stat-card--interactive"
+          onClick={() => onNavigate("services")}
+          aria-label="Open Services"
+        >
           <div className="stat-card__icon stat-card__icon--services">
             <svg viewBox="0 0 24 24" width="18" height="18">
               <path fill="currentColor" d="M3 3h8v8H3V3Zm10 0h8v8h-8V3ZM3 13h8v8H3v-8Zm13.5 0 1.6 3.4L21.5 17l-2.6 2.4L19.6 23l-3.1-1.8L13.4 23l.7-3.6L11.5 17l3.4-.6L16.5 13Z"/>
@@ -375,9 +415,14 @@ function DashboardOverview() {
           <span className="stat-card__label">Services Offered</span>
           <span className="stat-card__value">{services.length}</span>
           <span className="stat-card__sub">across all categories</span>
-        </div>
+        </button>
 
-        <div className="stat-card">
+        <button
+          type="button"
+          className="stat-card stat-card--interactive"
+          onClick={() => onNavigate("orders")}
+          aria-label="Open Orders"
+        >
           <div className="stat-card__icon stat-card__icon--orders">
             <svg viewBox="0 0 24 24" width="18" height="18">
               <path fill="currentColor" d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6Zm0 2h12l1.5 2h-15L6 4Zm-1 4h14v12H5V8Zm3 2v2h8v-2H8Z"/>
@@ -388,9 +433,14 @@ function DashboardOverview() {
           <span className="stat-card__sub">
             {ordersByStatus.placed} awaiting review
           </span>
-        </div>
+        </button>
 
-        <div className="stat-card stat-card--accent">
+        <button
+          type="button"
+          className="stat-card stat-card--accent stat-card--interactive"
+          onClick={() => onNavigate("reports")}
+          aria-label="Open Reports"
+        >
           <div className="stat-card__icon stat-card__icon--revenue">
             <svg viewBox="0 0 24 24" width="18" height="18">
               <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm.5 15.5v1h-1v-1c-1.4-.2-2.5-1-2.9-2.4l1.4-.6c.3.9 1 1.4 2 1.4.9 0 1.6-.4 1.6-1.1 0-.7-.5-1-1.9-1.4-1.8-.5-2.9-1.1-2.9-2.7 0-1.3 1-2.2 2.4-2.4v-1h1v1c1.2.2 2.1.9 2.5 2l-1.4.6c-.3-.7-.9-1.1-1.7-1.1-.8 0-1.4.4-1.4 1s.5.9 1.8 1.3c2 .6 3 1.2 3 2.8 0 1.4-1.1 2.3-2.5 2.5Z"/>
@@ -399,27 +449,47 @@ function DashboardOverview() {
           <span className="stat-card__label">Total Revenue</span>
           <span className="stat-card__value">₱{totalRevenue.toFixed(2)}</span>
           <span className="stat-card__sub">across all orders</span>
-        </div>
+        </button>
       </div>
 
       {/* Order status breakdown */}
       <div className="status-breakdown">
-        <div className="status-pill status-pill--placed">
+        <button
+          type="button"
+          className="status-pill status-pill--placed status-pill--interactive"
+          onClick={() => onNavigate("orders")}
+          aria-label={`View ${ordersByStatus.placed} placed orders`}
+        >
           <span className="status-pill__count">{ordersByStatus.placed}</span>
           <span className="status-pill__label">Placed</span>
-        </div>
-        <div className="status-pill status-pill--printing">
+        </button>
+        <button
+          type="button"
+          className="status-pill status-pill--printing status-pill--interactive"
+          onClick={() => onNavigate("orders")}
+          aria-label={`View ${ordersByStatus.printing} printing orders`}
+        >
           <span className="status-pill__count">{ordersByStatus.printing}</span>
           <span className="status-pill__label">Printing</span>
-        </div>
-        <div className="status-pill status-pill--ready">
+        </button>
+        <button
+          type="button"
+          className="status-pill status-pill--ready status-pill--interactive"
+          onClick={() => onNavigate("orders")}
+          aria-label={`View ${ordersByStatus.ready} ready orders`}
+        >
           <span className="status-pill__count">{ordersByStatus.ready}</span>
           <span className="status-pill__label">Ready</span>
-        </div>
-        <div className="status-pill status-pill--completed">
+        </button>
+        <button
+          type="button"
+          className="status-pill status-pill--completed status-pill--interactive"
+          onClick={() => onNavigate("orders")}
+          aria-label={`View ${ordersByStatus.completed} completed orders`}
+        >
           <span className="status-pill__count">{ordersByStatus.completed}</span>
           <span className="status-pill__label">Completed</span>
-        </div>
+        </button>
       </div>
 
       {/* Recent orders */}
@@ -530,8 +600,21 @@ function ReportsManagement() {
     .sort((a, b) => b.orderCount - a.orderCount || b.revenue - a.revenue);
 
   return (
-    <div className="dashboard-content">
+    <div className="dashboard-content report-print-root">
       {error && <div className="um-error">{error}</div>}
+
+      <div className="report-print-toolbar">
+        <div className="report-print-heading">
+          <h1>Perez Printing Shop</h1>
+          <p>Business Report · Generated {new Date().toLocaleDateString()}</p>
+        </div>
+        <button className="report-print-button" onClick={() => window.print()}>
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M7 3h10v5H7V3Zm10 2H9v1h8V5ZM6 10h12a3 3 0 0 1 3 3v5h-4v3H7v-3H3v-5a3 3 0 0 1 3-3Zm10 9v-5H8v5h8Zm2-5h1v-1h-1v1ZM5 13v3h1v-2h12v2h1v-3a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1Z" />
+          </svg>
+          Print report
+        </button>
+      </div>
 
       <div className="stat-grid report-stat-grid">
         <div className="stat-card">
@@ -669,6 +752,17 @@ function UserManagement({ currentUid }) {
     return matchesRole && matchesSearch;
   });
 
+  const roleTabs = [
+    { value: "all", label: "All users", count: users.length },
+    {
+      value: "customer",
+      label: "Customers",
+      count: users.filter((u) => (u.role || "customer") === "customer").length,
+    },
+    { value: "staff", label: "Staff", count: users.filter((u) => u.role === "staff").length },
+    { value: "admin", label: "Admins", count: users.filter((u) => u.role === "admin").length },
+  ];
+
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * pageSize;
@@ -681,6 +775,31 @@ function UserManagement({ currentUid }) {
   return (
     <div className="dashboard-content">
       {error && <div className="um-error">{error}</div>}
+
+      <div className="um-management-heading">
+        <div>
+          <h3>User directory</h3>
+          <p>Manage account roles and access.</p>
+        </div>
+      </div>
+
+      <div className="um-role-tabs" role="group" aria-label="Filter users by role">
+        {roleTabs.map((tab) => (
+          <button
+            key={tab.value}
+            type="button"
+            className={`um-role-tab ${roleFilter === tab.value ? "um-role-tab--active" : ""}`}
+            onClick={() => {
+              setRoleFilter(tab.value);
+              setPage(1);
+            }}
+            aria-pressed={roleFilter === tab.value}
+          >
+            {tab.label}
+            <span>{tab.count}</span>
+          </button>
+        ))}
+      </div>
 
       {/* Toolbar */}
       <div className="um-toolbar">
@@ -703,20 +822,6 @@ function UserManagement({ currentUid }) {
             }}
           />
         </div>
-
-        <select
-          className="um-toolbar-select"
-          value={roleFilter}
-          onChange={(e) => {
-            setRoleFilter(e.target.value);
-            setPage(1);
-          }}
-        >
-          <option value="all">All Roles</option>
-          <option value="admin">Admin</option>
-          <option value="staff">Staff</option>
-          <option value="customer">Customer</option>
-        </select>
 
         <div className="um-show-control">
           <span>Show</span>
@@ -822,7 +927,14 @@ function ServicesManagement() {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [categoryRecords, setCategoryRecords] = useState([]);
+  const [categoryName, setCategoryName] = useState("");
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [savingCategory, setSavingCategory] = useState(false);
   const [modalService, setModalService] = useState(null); // null = closed, {} = add, {...} = edit
+  const [newServiceCategory, setNewServiceCategory] = useState("");
   const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
@@ -833,8 +945,12 @@ function ServicesManagement() {
     setLoading(true);
     setError("");
     try {
-      const all = await getAllServices();
+      const [all, allCategories] = await Promise.all([
+        getAllServices(),
+        getAllServiceCategories(),
+      ]);
       setServices(all);
+      setCategoryRecords(allCategories);
     } catch (err) {
       setError("Failed to load services. Please try again.");
     } finally {
@@ -861,7 +977,60 @@ function ServicesManagement() {
       setServices((prev) => prev.map((s) => (s.id === saved.id ? saved : s)));
     }
     setModalService(null);
+    setNewServiceCategory("");
   }
+
+  async function handleAddCategory(event) {
+    event.preventDefault();
+    const trimmedName = categoryName.trim();
+    if (!trimmedName) return;
+    if (categories.some((category) => category.toLowerCase() === trimmedName.toLowerCase())) {
+      setError("That category already exists.");
+      return;
+    }
+
+    setSavingCategory(true);
+    setError("");
+    try {
+      const category = await addServiceCategory(trimmedName);
+      setCategoryRecords((previous) => [...previous, category]);
+      setCategoryFilter(category.name);
+      setCategoryName("");
+      setAddingCategory(false);
+    } catch (err) {
+      setError("Failed to add category. Please try again.");
+    } finally {
+      setSavingCategory(false);
+    }
+  }
+
+  const categories = [...new Set([
+    ...categoryRecords.map((category) => category.name?.trim()),
+    ...services.map((service) => service.category?.trim()),
+  ].filter(Boolean))].sort((first, second) => first.localeCompare(second));
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const filteredServices = services.filter((service) => {
+    const matchesCategory = categoryFilter === "all" || service.category === categoryFilter;
+    const searchableText = [
+      service.name,
+      service.category,
+      service.description,
+      ...(service.varieties || []).map((variety) => variety.name),
+    ].join(" ").toLowerCase();
+    return matchesCategory && (!normalizedSearch || searchableText.includes(normalizedSearch));
+  });
+  const uncategorizedServices = filteredServices.filter((service) => !service.category?.trim());
+  const serviceGroups = [
+    ...(categoryFilter === "all" ? categories : [categoryFilter])
+    .map((category) => ({
+      name: category,
+      services: filteredServices.filter((service) => service.category?.trim() === category),
+    })),
+    ...(categoryFilter === "all" && uncategorizedServices.length > 0
+      ? [{ name: "", services: uncategorizedServices }]
+      : []),
+  ]
+    .filter((group) => group.services.length > 0 || !normalizedSearch);
 
   if (loading) {
     return <div className="dashboard-content">Loading services...</div>;
@@ -872,81 +1041,171 @@ function ServicesManagement() {
       {error && <div className="um-error">{error}</div>}
 
       <div className="svc-toolbar">
-        <button
-          type="button"
-          className="svc-add-btn"
-          onClick={() => setModalService({})}
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15">
-            <path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z" />
-          </svg>
-          Add Service
-        </button>
-      </div>
-
-      {/* Services table */}
-      <div className="um-table-wrap">
-        <table className="um-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Category</th>
-              <th>Description</th>
-              <th>Base Price</th>
-              <th>Unit</th>
-              <th>Varieties (price)</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {services.map((svc) => (
-              <tr key={svc.id}>
-                <td>{svc.name}</td>
-                <td className="um-muted">{svc.category || "—"}</td>
-                <td className="um-muted">{svc.description || "—"}</td>
-                <td className="um-muted">
-                  {svc.price != null ? `₱${Number(svc.price).toFixed(2)}` : "—"}
-                </td>
-                <td className="um-muted">{svc.unit || "—"}</td>
-                <td className="um-muted">
-                  {svc.varieties?.length > 0 ? (
-                    <div className="svc-variety-tags">
-                      {svc.varieties.map((v, i) => (
-                        <span key={i} className="svc-variety-tag">
-                          {v.name}
-                          {v.price != null ? ` · ₱${Number(v.price).toFixed(2)}` : ""}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="svc-actions">
-                  <button className="svc-edit-btn" onClick={() => setModalService(svc)}>
-                    Edit
-                  </button>
-                  <button
-                    className="svc-delete-btn"
-                    onClick={() => handleDelete(svc.id)}
-                    disabled={deletingId === svc.id}
-                  >
-                    {deletingId === svc.id ? "Deleting..." : "Delete"}
-                  </button>
-                </td>
-              </tr>
+        <div className="svc-toolbar__copy">
+          <h3>Service catalog</h3>
+          <p>{categories.length} categories · {filteredServices.length} of {services.length} services</p>
+        </div>
+        <div className="svc-toolbar__controls">
+          <label className="svc-search">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path d="m21 21-4.3-4.3m2.3-5.2a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" stroke="currentColor" strokeWidth="2" fill="none" />
+            </svg>
+            <input
+              type="search"
+              placeholder="Search services..."
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              aria-label="Search services"
+            />
+          </label>
+          <select
+            className="svc-category-filter"
+            value={categoryFilter}
+            onChange={(event) => setCategoryFilter(event.target.value)}
+            aria-label="Filter services by category"
+          >
+            <option value="all">All categories</option>
+            {categories.map((category) => (
+              <option key={category} value={category}>{category}</option>
             ))}
-          </tbody>
-        </table>
-
-        {services.length === 0 && (
-          <div className="um-empty">No services added yet.</div>
-        )}
+          </select>
+          <button
+            type="button"
+            className="svc-add-btn"
+            onClick={() => setAddingCategory((previous) => !previous)}
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+              <path fill="currentColor" d="M3 5h7l2 2h9v12H3V5Zm2 2v10h14V9h-8l-2-2H5Z" />
+            </svg>
+            Add Category
+          </button>
+        </div>
       </div>
+
+      {addingCategory && (
+        <form className="svc-category-form" onSubmit={handleAddCategory}>
+          <label htmlFor="new-service-category">New category</label>
+          <input
+            id="new-service-category"
+            autoFocus
+            type="text"
+            value={categoryName}
+            onChange={(event) => setCategoryName(event.target.value)}
+            placeholder="e.g. Large Format Printing"
+            maxLength={60}
+          />
+          <button type="submit" className="svc-category-save" disabled={savingCategory || !categoryName.trim()}>
+            {savingCategory ? "Creating..." : "Create category"}
+          </button>
+          <button
+            type="button"
+            className="svc-category-cancel"
+            onClick={() => {
+              setAddingCategory(false);
+              setCategoryName("");
+            }}
+          >
+            Cancel
+          </button>
+        </form>
+      )}
+
+      {categories.length === 0 && services.length === 0 ? (
+        <div className="um-empty">Create a category to start building the service catalog.</div>
+      ) : filteredServices.length === 0 && normalizedSearch ? (
+        <div className="um-empty">No services match these filters.</div>
+      ) : (
+        <div className="svc-category-list">
+          {serviceGroups.map((group) => (
+            <section className="svc-category-section" key={group.name || "uncategorized"}>
+              <header className="svc-category-heading">
+                <div>
+                  <h4>{group.name || "Uncategorized"}</h4>
+                  <span>{group.services.length} {group.services.length === 1 ? "service" : "services"}</span>
+                </div>
+                <button
+                  type="button"
+                  className="svc-category-add-service"
+                  onClick={() => {
+                    setNewServiceCategory(group.name);
+                    setModalService({});
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+                    <path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z" />
+                  </svg>
+                  Add service
+                </button>
+              </header>
+
+              {group.services.length === 0 ? (
+                <div className="svc-category-empty">No services in this category yet.</div>
+              ) : (
+                <div className="svc-manage-grid">
+                  {group.services.map((svc) => (
+                    <article key={svc.id} className="svc-manage-card">
+                      <div className="svc-manage-card__header">
+                        <div className="svc-manage-card__identity">
+                          <h3>{svc.name}</h3>
+                        </div>
+                        <div className="svc-actions">
+                          <button
+                            type="button"
+                            className="svc-edit-btn"
+                            onClick={() => setModalService(svc)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="svc-delete-btn"
+                            onClick={() => handleDelete(svc.id)}
+                            disabled={deletingId === svc.id}
+                          >
+                            {deletingId === svc.id ? "Deleting..." : "Delete"}
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="svc-manage-card__description">
+                        {svc.description || "No description provided."}
+                      </p>
+
+                      <div className="svc-manage-card__price-row">
+                        <div>
+                          <span className="svc-manage-card__eyebrow">Base price</span>
+                          <strong>{svc.price != null ? `₱${Number(svc.price).toFixed(2)}` : "Contact for pricing"}</strong>
+                        </div>
+                        {svc.unit && <span className="svc-manage-card__unit">per {svc.unit}</span>}
+                      </div>
+
+                      {svc.varieties?.length > 0 && (
+                        <div className="svc-manage-card__varieties">
+                          <span className="svc-manage-card__eyebrow">Options and prices</span>
+                          <div className="svc-variety-tags">
+                            {svc.varieties.map((variety, index) => (
+                              <span key={`${svc.id}-${variety.name}-${index}`} className="svc-variety-tag">
+                                {variety.name}
+                                {variety.price != null ? ` · ₱${Number(variety.price).toFixed(2)}` : ""}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
 
       {modalService && (
         <ServiceModal
           initialService={Object.keys(modalService).length ? modalService : null}
+          initialCategory={newServiceCategory}
+          categories={categories}
           onClose={() => setModalService(null)}
           onSaved={handleSaved}
         />
@@ -1019,11 +1278,11 @@ function TagListField({ label, hint, placeholder, values, onChange }) {
   );
 }
 
-function ServiceModal({ initialService, onClose, onSaved }) {
+function ServiceModal({ initialService, initialCategory = "", categories = [], onClose, onSaved }) {
   const isEdit = !!initialService;
 
   const [name, setName] = useState(initialService?.name || "");
-  const [category, setCategory] = useState(initialService?.category || "");
+  const [category, setCategory] = useState(initialService?.category || initialCategory);
   const [description, setDescription] = useState(initialService?.description || "");
   const [price, setPrice] = useState(
     initialService?.price != null ? String(initialService.price) : ""
@@ -1142,14 +1401,21 @@ function ServiceModal({ initialService, onClose, onSaved }) {
             />
 
             <label className="field-label" htmlFor="svcCategory">Category</label>
-            <input
+            <select
               id="svcCategory"
-              type="text"
               className="order-select"
-              placeholder="e.g. Documents, Cards, Apparel"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-            />
+              required={!isEdit}
+            >
+              <option value="">Select a category</option>
+              {categories.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+              {category && !categories.includes(category) && (
+                <option value={category}>{category}</option>
+              )}
+            </select>
 
             <label className="field-label" htmlFor="svcDescription">Description</label>
             <textarea
@@ -1291,7 +1557,7 @@ function ServiceModal({ initialService, onClose, onSaved }) {
   );
 }
 
-const ORDER_STATUSES = ["placed", "printing", "ready", "completed"];
+const ORDER_STATUSES = ["placed", "printing", "ready", "completed", "needs_revision"];
 
 function statusLabel(s) {
   switch (s) {
@@ -1303,12 +1569,14 @@ function statusLabel(s) {
       return "Ready for Pickup";
     case "completed":
       return "Completed";
+    case "needs_revision":
+      return "Needs Revision";
     default:
       return s || "Placed";
   }
 }
 
-function OrderManagement() {
+function OrderManagement({ sender }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1336,16 +1604,44 @@ function OrderManagement() {
   }
 
   function handleStatusChange(orderId, newStatus) {
+    setError("");
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
     );
   }
 
+  function handleRevisionNoteChange(orderId, note) {
+    setError("");
+    setOrders((prev) =>
+      prev.map((order) => (order.id === orderId ? { ...order, staffNote: note } : order))
+    );
+  }
+
   async function handleSaveStatus(orderId, status) {
+    const revisionNote = orders.find((order) => order.id === orderId)?.staffNote?.trim();
+    if (status === "needs_revision" && !revisionNote) {
+      setError("Enter the problem details before setting this order to Needs Revision.");
+      return;
+    }
+
     setSavingId(orderId);
     setSavedId(null);
     try {
-      await updateOrderStatus(orderId, status);
+      if (status === "needs_revision") {
+        await requestOrderRevision(orderId, revisionNote);
+        try {
+          await sendOrderRevisionMessage({
+            order: orders.find((order) => order.id === orderId),
+            sender,
+            note: revisionNote,
+          });
+        } catch (messageError) {
+          console.error("Failed to message customer about order revision:", messageError);
+          setError("Revision saved, but the direct message could not be sent. The customer can still see the note in Notifications.");
+        }
+      } else {
+        await updateOrderStatus(orderId, status);
+      }
       setSavedId(orderId);
       setTimeout(() => setSavedId(null), 2000);
     } catch (err) {
@@ -1366,9 +1662,11 @@ function OrderManagement() {
     setError("");
     try {
       await deleteOrder(order.id);
-      setOrders((prev) => prev.filter((item) => item.id !== order.id));
+      setOrders((previous) => previous.filter((item) => item.id !== order.id));
     } catch (err) {
-      setError("Failed to delete order. Please try again.");
+      setError(err.code === "permission-denied"
+        ? "Firestore rules do not allow this account to delete or archive orders."
+        : "Failed to delete order. Please try again.");
     } finally {
       setDeletingId(null);
     }
@@ -1500,7 +1798,10 @@ function OrderManagement() {
                 <button
                   className="um-save-btn"
                   onClick={() => handleSaveStatus(order.id, order.status || "placed")}
-                  disabled={savingId === order.id}
+                  disabled={
+                    savingId === order.id ||
+                    (order.status === "needs_revision" && !order.staffNote?.trim())
+                  }
                 >
                   {savingId === order.id
                     ? "Saving..."
@@ -1528,6 +1829,18 @@ function OrderManagement() {
                   </button>
                 )}
               </div>
+              {order.status === "needs_revision" && (
+                <div className="ord-revision-field">
+                  <label htmlFor={`admin-revision-note-${order.id}`}>Problem with the order</label>
+                  <textarea
+                    id={`admin-revision-note-${order.id}`}
+                    value={order.staffNote || ""}
+                    onChange={(event) => handleRevisionNoteChange(order.id, event.target.value)}
+                    placeholder="Describe what needs to be corrected..."
+                    required
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   getConversationId,
+  markAllUnreadMessagesRead,
   sendDirectMessage,
   subscribeConversations,
   subscribeDirectMessages,
@@ -130,6 +131,12 @@ function selectContact(profile) {
   setAttachment(null);
   setError("");
   setLoadingMessages(true);
+  markAllUnreadMessagesRead(uid).catch((readError) => {
+    console.error("Failed to mark messages as read:", readError);
+    setError(readError.code === "permission-denied"
+      ? "Messaging read status could not be saved to your profile."
+      : "Could not update message read status.");
+  });
 }
 
 async function handleSend(event) {

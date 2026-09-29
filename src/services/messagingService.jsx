@@ -1,9 +1,11 @@
 import {
   addDoc,
   collection,
+  doc,
   onSnapshot,
   query,
   serverTimestamp,
+  setDoc,
   where,
 } from "firebase/firestore";
 import { db } from "../firebase-config";
@@ -96,6 +98,56 @@ export function subscribeDirectMessages(uid, conversationId, onMessages, onError
   );
 }
 
+export function subscribeUnreadMessageCount(uid, onCount, onError) {
+  const unreadQuery = query(
+    collection(db, "messages"),
+    where("recipientId", "==", uid)
+  );
+  let messages = [];
+  let messagesReadAt = 0;
+  const emitUnreadCount = () => {
+    const unreadCount = messages.filter((message) => {
+      const data = message.data();
+      if (data.readAt) return false;
+      const createdAt = data.createdAt?.toMillis?.() || data.createdAt?.toDate?.()?.getTime() || 0;
+      return createdAt > messagesReadAt;
+    }).length;
+    onCount(unreadCount);
+  };
+
+  const stopMessages = onSnapshot(
+    unreadQuery,
+    (snapshot) => {
+      messages = snapshot.docs;
+      emitUnreadCount();
+    },
+    onError
+  );
+  const stopReadState = onSnapshot(
+    doc(db, "users", uid),
+    (snapshot) => {
+      const timestamp = snapshot.data()?.messagesReadAt;
+      messagesReadAt = timestamp?.toMillis?.() || timestamp?.toDate?.()?.getTime() || 0;
+      emitUnreadCount();
+    },
+    onError
+  );
+
+  return () => {
+    stopMessages();
+    stopReadState();
+  };
+}
+
+export async function markAllUnreadMessagesRead(uid) {
+  if (!uid) return;
+  await setDoc(
+    doc(db, "users", uid),
+    { messagesReadAt: serverTimestamp() },
+    { merge: true }
+  );
+}
+
 // ...existing code...
 export async function sendDirectMessage({
   conversationId,
@@ -124,6 +176,58 @@ export async function sendDirectMessage({
     recipientRole: recipient.role,
     text: trimmedText,
     attachment,
+    readAt: null,
     createdAt: serverTimestamp(),
+  });
+}
+
+export function sendOrderRevisionMessage({ order, sender, note }) {
+  const trimmedNote = (note || "").trim();
+  if (!sender?.id) throw new Error("Staff account is unavailable.");
+  if (!order?.customerId) throw new Error("Customer account is unavailable.");
+  if (!trimmedNote) throw new Error("Revision note cannot be empty.");
+
+  const lines = order.items?.length
+    ? order.items
+    : order.serviceName
+    ? [order]
+    : [];
+  const orderLines = lines.length
+    ? lines.map((line) => {
+        const service = line.serviceName || "Service";
+        const variety = line.varietyName ? ` (${line.varietyName})` : "";
+        const quantity = `${line.quantity || 1}${line.unit ? ` ${line.unit}` : ""}`;
+        const lineTotal = line.lineTotal != null
+          ? ` - ₱${Number(line.lineTotal).toFixed(2)}`
+          : "";
+        return `- ${service}${variety} x${quantity}${lineTotal}`;
+      })
+    : ["- Order items unavailable"];
+  const messageLines = [
+    `Order${order.referenceId ? ` ${order.referenceId}` : ""} needs revision`,
+    "",
+    "Order details:",
+    ...orderLines,
+  ];
+
+  if (order.description) messageLines.push(`Specifications: ${order.description}`);
+  if (order.files?.length) {
+    const fileNames = order.files.map((file) => file.name).filter(Boolean);
+    if (fileNames.length) messageLines.push(`Files: ${fileNames.join(", ")}`);
+  }
+  if (order.totalPrice != null) {
+    messageLines.push(`Total: ₱${Number(order.totalPrice).toFixed(2)}`);
+  }
+  messageLines.push("", `Problem reported: ${trimmedNote}`);
+
+  return sendDirectMessage({
+    conversationId: getConversationId(sender.id, order.customerId),
+    sender,
+    recipient: {
+      id: order.customerId,
+      name: order.customerEmail || "Customer",
+      role: "customer",
+    },
+    text: messageLines.join("\n"),
   });
 }

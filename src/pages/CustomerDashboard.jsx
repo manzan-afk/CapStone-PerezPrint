@@ -2,6 +2,11 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import DirectMessages from "../components/DirectMessages";
+import UnreadMessageBadge from "../components/UnreadMessageBadge";
+import SidebarCountBadge from "../components/SidebarCountBadge";
+import useSidebarOrderCounts from "../hooks/useSidebarOrderCounts";
+import { markOrderNotificationsViewed } from "../services/userServices";
+import { markAllUnreadMessagesRead } from "../services/messagingService";
 import { getAllServices } from "../services/servicesService";
 import {
   uploadOrderFiles,
@@ -17,6 +22,7 @@ export default function CustomerDashboard() {
   const [profileImageFailed, setProfileImageFailed] = useState(false);
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
+  const orderCounts = useSidebarOrderCounts(user?.uid, "customer");
 
   async function handleLogout() {
     await logout();
@@ -140,12 +146,35 @@ export default function CustomerDashboard() {
                 e.preventDefault();
                 setView(item.key);
                 setSidebarOpen(false);
+                if (item.key === "notifications" && user?.uid) {
+                  markOrderNotificationsViewed(user.uid).catch((error) => {
+                    console.error("Failed to mark order notifications as viewed:", error);
+                  });
+                }
+                if (item.key === "messages" && user?.uid) {
+                  markAllUnreadMessagesRead(user.uid).catch((error) => {
+                    console.error("Failed to mark messages as read:", error);
+                  });
+                }
               }}
             >
               <svg viewBox="0 0 24 24" width="20" height="20">
                 {item.icon}
               </svg>
               {item.label}
+              {item.key === "orders" && (
+                <SidebarCountBadge count={orderCounts.activeOrders} label="active orders" />
+              )}
+              {item.key === "pickup" && (
+                <SidebarCountBadge count={orderCounts.readyPickups} label="ready pickups" />
+              )}
+              {item.key === "notifications" && (
+                <SidebarCountBadge
+                  count={orderCounts.unreadOrderNotifications}
+                  label="unread order notifications"
+                />
+              )}
+              {item.key === "messages" && <UnreadMessageBadge uid={user?.uid} />}
             </a>
           ))}
         </nav>
@@ -672,6 +701,8 @@ function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [cartService, setCartService] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   useEffect(() => {
     loadServices();
@@ -694,6 +725,20 @@ function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
     return <div className="dashboard-content">Loading services...</div>;
   }
 
+  const categories = [...new Set(services.map((service) => service.category?.trim()).filter(Boolean))]
+    .sort((first, second) => first.localeCompare(second));
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const filteredServices = services.filter((service) => {
+    const matchesCategory = categoryFilter === "all" || service.category?.trim() === categoryFilter;
+    const searchableText = [
+      service.name,
+      service.category,
+      service.description,
+      ...(service.varieties || []).map((variety) => variety.name),
+    ].join(" ").toLowerCase();
+    return matchesCategory && (!normalizedSearch || searchableText.includes(normalizedSearch));
+  });
+
   return (
     <div className="dashboard-content">
       {error && <div className="svc-browse-error">{error}</div>}
@@ -703,8 +748,60 @@ function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
           No services are available yet — check back soon.
         </div>
       ) : (
-        <div className="svc-browse-grid">
-          {services.map((svc) => {
+        <>
+          <div className="svc-browse-toolbar">
+            <div>
+              <h3>Browse print services</h3>
+              <p>{filteredServices.length} of {services.length} services</p>
+            </div>
+            <label className="svc-browse-search">
+              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+                <path d="m21 21-4.3-4.3m2.3-5.2a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" stroke="currentColor" strokeWidth="2" fill="none" />
+              </svg>
+              <input
+                type="search"
+                placeholder="Search services or options"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                aria-label="Search services"
+              />
+            </label>
+          </div>
+
+          {categories.length > 0 && (
+            <div className="svc-browse-categories" role="group" aria-label="Filter services by category">
+              <button
+                type="button"
+                className={`svc-browse-category ${categoryFilter === "all" ? "svc-browse-category--active" : ""}`}
+                onClick={() => setCategoryFilter("all")}
+                aria-pressed={categoryFilter === "all"}
+              >
+                All services <span>{services.length}</span>
+              </button>
+              {categories.map((category) => {
+                const count = services.filter((service) => service.category?.trim() === category).length;
+                return (
+                  <button
+                    key={category}
+                    type="button"
+                    className={`svc-browse-category ${categoryFilter === category ? "svc-browse-category--active" : ""}`}
+                    onClick={() => setCategoryFilter(category)}
+                    aria-pressed={categoryFilter === category}
+                  >
+                    {category} <span>{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {filteredServices.length === 0 ? (
+            <div className="svc-browse-empty svc-browse-empty--filtered">
+              No services match your search. Try another term or category.
+            </div>
+          ) : (
+            <div className="svc-browse-grid">
+              {filteredServices.map((svc) => {
             const varietyPrices = (svc.varieties || [])
               .map((v) => v.price)
               .filter((p) => p != null);
@@ -739,6 +836,9 @@ function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
                 )}
                 {svc.varieties?.length > 0 && (
                   <div className="svc-card__varieties">
+                    <span className="svc-card__options-count">
+                      {svc.varieties.length} {svc.varieties.length === 1 ? "option" : "options"}
+                    </span>
                     {svc.varieties.slice(0, 3).map((v, i) => (
                       <span key={i} className="svc-card__variety-chip">
                         {v.name}
@@ -759,7 +859,9 @@ function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
               </button>
             );
           })}
-        </div>
+            </div>
+          )}
+        </>
       )}
 
       {cartService && (

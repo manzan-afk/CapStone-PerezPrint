@@ -18,10 +18,12 @@ import { db } from "../firebase-config";
  */
 export async function getAllServices() {
   const snapshot = await getDocs(collection(db, "services"));
-  return snapshot.docs.map((docSnap) => ({
-    id: docSnap.id,
-    ...docSnap.data(),
-  }));
+  return snapshot.docs
+    .map((docSnap) => ({
+      id: docSnap.id,
+      ...docSnap.data(),
+    }))
+    .filter((service) => service.recordType !== "category");
 }
 
 /**
@@ -54,4 +56,26 @@ export function updateService(id, data) {
  */
 export function deleteService(id) {
   return deleteDoc(doc(db, "services", id));
+}
+
+export async function getAllServiceCategories() {
+  const snapshot = await getDocs(collection(db, "services"));
+  return snapshot.docs
+    .map((docSnap) => ({
+      id: docSnap.id,
+      ...docSnap.data(),
+    }))
+    .filter((record) => record.recordType === "category");
+}
+
+export async function addServiceCategory(name) {
+  const normalizedName = (name || "").trim();
+  if (!normalizedName) throw new Error("Category name is required.");
+
+  const docRef = await addDoc(collection(db, "services"), {
+    recordType: "category",
+    name: normalizedName,
+    createdAt: serverTimestamp(),
+  });
+  return { id: docRef.id, name: normalizedName };
 }

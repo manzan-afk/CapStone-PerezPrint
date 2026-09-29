@@ -140,6 +140,13 @@
   font-size: 12.5px;
 }
 
+.printable-receipt__screenshot-hint {
+  margin: -8px 0 14px;
+  color: #1b2436;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .printable-receipt__actions {
   display: flex;
   gap: 8px;

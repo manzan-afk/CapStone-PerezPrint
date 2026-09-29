@@ -18,6 +18,15 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase-config";
 
+function mapVisibleOrders(snapshot) {
+  return snapshot.docs
+    .map((docSnap) => ({
+      id: docSnap.id,
+      ...docSnap.data(),
+    }))
+    .filter((order) => !order.isArchived);
+}
+
 // From your Cloudinary dashboard (Settings → Upload → Upload presets).
 // Cloud name is shown on your dashboard home page.
 const CLOUDINARY_CLOUD_NAME = "fl6yl7z7";
@@ -96,10 +105,7 @@ export async function getUserOrders(uid) {
     orderBy("createdAt", "desc")
   );
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((docSnap) => ({
-    id: docSnap.id,
-    ...docSnap.data(),
-  }));
+  return mapVisibleOrders(snapshot);
 }
 
 /**
@@ -118,10 +124,7 @@ export function subscribeUserOrders(uid, onOrders, onError) {
   return onSnapshot(
     q,
     (snapshot) => {
-      onOrders(snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      })));
+      onOrders(mapVisibleOrders(snapshot));
     },
     onError
   );
@@ -138,10 +141,7 @@ export function subscribeAllOrders(onOrders, onError) {
   return onSnapshot(
     q,
     (snapshot) => {
-      onOrders(snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      })));
+      onOrders(mapVisibleOrders(snapshot));
     },
     onError
   );
@@ -184,17 +184,24 @@ export function requestOrderRevision(orderId, note) {
 export async function getAllOrders() {
   const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((docSnap) => ({
-    id: docSnap.id,
-    ...docSnap.data(),
-  }));
+  return mapVisibleOrders(snapshot);
 }
 
 /**
- * Deletes an order after it has been picked up (completed).
+ * Deletes an order after it has been picked up (completed), archiving it if
+ * Firestore rules prohibit hard deletion but allow order updates.
  * @param {string} orderId
  * @returns {Promise<void>}
  */
-export function deleteOrder(orderId) {
-  return deleteDoc(doc(db, "orders", orderId));
+export async function deleteOrder(orderId) {
+  const orderRef = doc(db, "orders", orderId);
+  try {
+    await deleteDoc(orderRef);
+  } catch (error) {
+    if (error.code !== "permission-denied") throw error;
+    await updateDoc(orderRef, {
+      isArchived: true,
+      archivedAt: serverTimestamp(),
+    });
+  }
 }
