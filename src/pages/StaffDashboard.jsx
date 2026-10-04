@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getAllOrders, updateOrderStatus, requestOrderRevision } from "../services/ordersService";
 import {
-  markAllUnreadMessagesRead,
   sendOrderRevisionMessage,
 } from "../services/messagingService";
 import DirectMessages from "../components/DirectMessages";
@@ -11,9 +10,13 @@ import UnreadMessageBadge from "../components/UnreadMessageBadge";
 import SidebarCountBadge from "../components/SidebarCountBadge";
 import useSidebarOrderCounts from "../hooks/useSidebarOrderCounts";
 import PrintableReceipt from "../components/PrintableReceipt";
+import ProfileInfo from "../components/ProfileInfo";
+import PickupOrders from "../components/PickupOrders";
+import OrderDetails from "../components/OrderDetails";
 import "./StaffDashboard.css";
+import { lineOptionsSuffix } from "../utils/orderLines";
 
-const ORDER_STATUSES = ["placed", "printing", "ready", "completed", "needs_revision"];
+const ORDER_STATUSES = ["placed", "printing", "ready", "completed", "needs_revision", "cancelled"];
 
 function statusLabel(s) {
   switch (s) {
@@ -24,9 +27,11 @@ function statusLabel(s) {
     case "ready":
       return "Ready for Pickup";
     case "completed":
-      return "Completed";
+      return "Picked Up";
     case "needs_revision":
       return "Needs Revision";
+    case "cancelled":
+      return "Cancelled";
     default:
       return s || "Placed";
   }
@@ -78,7 +83,7 @@ export default function StaffDashboard() {
     },
     {
       key: "pickup",
-      label: "Pickup Schedule",
+      label: "Pickups",
       icon: (
         <path
           fill="currentColor"
@@ -98,7 +103,10 @@ export default function StaffDashboard() {
     },
   ];
 
-  const activeLabel = navItems.find((item) => item.key === view)?.label || "Dashboard";
+  const activeLabel =
+    view === "profile"
+      ? "Personal Information"
+      : navItems.find((item) => item.key === view)?.label || "Dashboard";
 
   return (
     <div className="dashboard-layout">
@@ -142,11 +150,6 @@ export default function StaffDashboard() {
                 e.preventDefault();
                 setView(item.key);
                 setSidebarOpen(false);
-                if (item.key === "messages" && user?.uid) {
-                  markAllUnreadMessagesRead(user.uid).catch((error) => {
-                    console.error("Failed to mark messages as read:", error);
-                  });
-                }
               }}
             >
               <svg viewBox="0 0 24 24" width="20" height="20">
@@ -165,7 +168,15 @@ export default function StaffDashboard() {
         </nav>
 
         <div className="sidebar__footer">
-          <div className="user-info">
+          <button
+            type="button"
+            className={`user-info user-info--button ${view === "profile" ? "user-info--active" : ""}`}
+            onClick={() => {
+              setView("profile");
+              setSidebarOpen(false);
+            }}
+            aria-label="Open personal information"
+          >
             <div className="user-avatar">
               {user?.photoURL && !profileImageFailed ? (
                 <img
@@ -198,7 +209,7 @@ export default function StaffDashboard() {
                 <span className="user-email">{user.email}</span>
               )}
             </div>
-          </div>
+          </button>
 
           <button className="logout-btn" onClick={handleLogout}>
             <svg viewBox="0 0 24 24" width="18" height="18">
@@ -247,7 +258,11 @@ export default function StaffDashboard() {
           />
         )}
 
-        {view !== "dashboard" && view !== "orders" && view !== "messages" && (
+        {view === "profile" && <ProfileInfo user={user} profile={profile} />}
+
+        {view === "pickup" && <PickupOrders />}
+
+        {view !== "dashboard" && view !== "orders" && view !== "messages" && view !== "profile" && view !== "pickup" && (
           <div className="dashboard-content dashboard-content--empty">
             Coming soon.
           </div>
@@ -370,7 +385,7 @@ function StaffOverview({ displayName, onGoToOrders }) {
               <path fill="currentColor" d="m9 16.2-3.5-3.5L4 14.2 9 19.2 20 8.2l-1.5-1.5Z"/>
             </svg>
           </div>
-          <span className="stat-card__label">Completed</span>
+          <span className="stat-card__label">Picked Up</span>
           <span className="stat-card__value">{completedCount}</span>
         </div>
       </div>
@@ -420,6 +435,13 @@ function OrderManagement({ sender }) {
   const [savedId, setSavedId] = useState(null);
   const [reviewOrder, setReviewOrder] = useState(null);
   const [receiptOrder, setReceiptOrder] = useState(null);
+  const [detailsOrder, setDetailsOrder] = useState(null);
+
+  // Clicks on the card's own controls shouldn't open the details.
+  function handleCardClick(event, order) {
+    if (event.target.closest("button, select, a, textarea, input, label")) return;
+    setDetailsOrder(order);
+  }
 
   useEffect(() => {
     loadOrders();
@@ -478,6 +500,9 @@ function OrderManagement({ sender }) {
         await updateOrderStatus(orderId, status);
       }
       setSavedId(orderId);
+      if (status === "cancelled") {
+        setOrders((prev) => prev.filter((order) => order.id !== orderId));
+      }
       if (status === "completed") {
         const completedOrder = orders.find((order) => order.id === orderId);
         if (completedOrder) setReceiptOrder({ ...completedOrder, status });
@@ -602,7 +627,18 @@ function OrderManagement({ sender }) {
             const isPlaced = (order.status || "placed") === "placed";
 
             return (
-              <div key={order.id} className="ord-card">
+              <div
+                key={order.id}
+                className="ord-card ord-card--clickable"
+                onClick={(event) => handleCardClick(event, order)}
+                onKeyDown={(event) => {
+                  if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+                    event.preventDefault();
+                    setDetailsOrder(order);
+                  }
+                }}
+                tabIndex={0}
+              >
                 <div className="ord-card__header">
                   <div>
                     <span className="ord-card__service">{summary}</span>
@@ -708,6 +744,10 @@ function OrderManagement({ sender }) {
         />
       )}
 
+      {detailsOrder && (
+        <OrderDetails order={detailsOrder} onClose={() => setDetailsOrder(null)} />
+      )}
+
       {receiptOrder && (
         <PrintableReceipt
           order={receiptOrder}
@@ -760,7 +800,7 @@ function ReviewOrderModal({ order, saving, onClose, onAccept, onRequestRevision 
             <div key={i} className="review-line">
               <span>
                 {line.serviceName}
-                {line.varietyName ? ` (${line.varietyName})` : ""} x{line.quantity || 1}
+                {line.varietyName ? ` (${line.varietyName})` : ""}{lineOptionsSuffix(line)} x{line.quantity || 1}
               </span>
               <span>
                 {line.lineTotal != null ? `₱${Number(line.lineTotal).toFixed(2)}` : "—"}

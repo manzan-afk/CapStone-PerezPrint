@@ -6,15 +6,17 @@ import UnreadMessageBadge from "../components/UnreadMessageBadge";
 import SidebarCountBadge from "../components/SidebarCountBadge";
 import useSidebarOrderCounts from "../hooks/useSidebarOrderCounts";
 import { markOrderNotificationsViewed } from "../services/userServices";
-import { markAllUnreadMessagesRead } from "../services/messagingService";
 import { getAllServices } from "../services/servicesService";
 import {
   uploadOrderFiles,
   createOrder,
   getUserOrders,
   subscribeUserOrders,
+  cancelOrder,
 } from "../services/ordersService";
+import ProfileInfo from "../components/ProfileInfo";
 import "./CustomerDashboard.css";
+import { lineOptionsSuffix, getServiceUnits, formatPerUnit } from "../utils/orderLines";
 
 export default function CustomerDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -102,7 +104,10 @@ export default function CustomerDashboard() {
     },
   ];
 
-  const activeLabel = navItems.find((item) => item.key === view)?.label || "Dashboard";
+  const activeLabel =
+    view === "profile"
+      ? "Personal Information"
+      : navItems.find((item) => item.key === view)?.label || "Dashboard";
 
   return (
     <div className="dashboard-layout">
@@ -151,11 +156,6 @@ export default function CustomerDashboard() {
                     console.error("Failed to mark order notifications as viewed:", error);
                   });
                 }
-                if (item.key === "messages" && user?.uid) {
-                  markAllUnreadMessagesRead(user.uid).catch((error) => {
-                    console.error("Failed to mark messages as read:", error);
-                  });
-                }
               }}
             >
               <svg viewBox="0 0 24 24" width="20" height="20">
@@ -180,7 +180,15 @@ export default function CustomerDashboard() {
         </nav>
 
         <div className="sidebar__footer">
-          <div className="user-info">
+          <button
+            type="button"
+            className={`user-info user-info--button ${view === "profile" ? "user-info--active" : ""}`}
+            onClick={() => {
+              setView("profile");
+              setSidebarOpen(false);
+            }}
+            aria-label="Open personal information"
+          >
             <div className="user-avatar">
               {user?.photoURL && !profileImageFailed ? (
                 <img
@@ -211,7 +219,7 @@ export default function CustomerDashboard() {
               </span>
               {user?.email && <span className="user-email">{user.email}</span>}
             </div>
-          </div>
+          </button>
 
           <button className="logout-btn" onClick={handleLogout}>
             <svg viewBox="0 0 24 24" width="18" height="18">
@@ -277,6 +285,8 @@ export default function CustomerDashboard() {
         {view === "notifications" && <OrderNotifications uid={user?.uid} />}
 
         {view === "pickup" && <PickupSchedule uid={user?.uid} />}
+
+        {view === "profile" && <ProfileInfo user={user} profile={profile} />}
 
         {view === "messages" && (
           <DirectMessages
@@ -357,7 +367,7 @@ function PickupSchedule({ uid }) {
                     <dd>
                       {lines.length > 0
                         ? lines.map((line) => (
-                          `${line.serviceName}${line.varietyName ? ` (${line.varietyName})` : ""} x${line.quantity || 1}`
+                          `${line.serviceName}${line.varietyName ? ` (${line.varietyName})` : ""}${lineOptionsSuffix(line)} x${line.quantity || 1}`
                         )).join(", ")
                         : "Order details unavailable"}
                     </dd>
@@ -425,8 +435,9 @@ function OrderNotifications({ uid }) {
     placed: "We received your order and will begin processing it.",
     printing: "Your order is now being printed.",
     ready: "Your order is ready for pickup.",
-    completed: "Your order has been completed.",
+    completed: "Your order has been picked up.",
     needs_revision: "Your order needs attention. Review the staff note below.",
+    cancelled: "This order was cancelled.",
   };
 
   return (
@@ -453,6 +464,8 @@ function OrderNotifications({ uid }) {
                       ? "Ready for pickup"
                       : status === "needs_revision"
                       ? "Order needs attention"
+                      : status === "completed"
+                      ? "Order picked up"
                       : `Order ${status.replaceAll("_", " ")}`}
                   </h3>
                   <time>{formatTimestamp(messageTime)}</time>
@@ -469,7 +482,7 @@ function OrderNotifications({ uid }) {
                     <dd>
                       {lines.length > 0
                         ? lines.map((line) =>
-                            `${line.serviceName}${line.varietyName ? ` (${line.varietyName})` : ""} x${line.quantity || 1}`
+                            `${line.serviceName}${line.varietyName ? ` (${line.varietyName})` : ""}${lineOptionsSuffix(line)} x${line.quantity || 1}`
                           ).join(", ")
                         : "Order details unavailable"}
                     </dd>
@@ -535,9 +548,11 @@ function CustomerOverview({ uid, displayName, customerName, onGoToServices, onGo
       case "ready":
         return "Ready for Pickup";
       case "completed":
-        return "Completed";
+        return "Picked Up";
       case "needs_revision":
         return "Needs Revision";
+      case "cancelled":
+        return "Cancelled";
       default:
         return s || "Placed";
     }
@@ -551,7 +566,9 @@ function CustomerOverview({ uid, displayName, customerName, onGoToServices, onGo
     ["placed", "printing", "ready"].includes(o.status || "placed")
   ).length;
   const completedCount = orders.filter((o) => o.status === "completed").length;
-  const totalSpent = orders.reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
+  const totalSpent = orders
+    .filter((o) => o.status !== "cancelled")
+    .reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
   const readyForPickup = orders.filter((o) => o.status === "ready");
 
   const recentOrders = [...orders]
@@ -606,7 +623,7 @@ function CustomerOverview({ uid, displayName, customerName, onGoToServices, onGo
               <path fill="currentColor" d="m9 16.2-3.5-3.5L4 14.2 9 19.2 20 8.2l-1.5-1.5Z"/>
             </svg>
           </div>
-          <span className="stat-card__label">Completed</span>
+          <span className="stat-card__label">Picked Up</span>
           <span className="stat-card__value">{completedCount}</span>
         </div>
         <div className="stat-card stat-card--accent">
@@ -817,16 +834,23 @@ function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
             } else if (svc.price != null) {
               priceDisplay = `₱${Number(svc.price).toFixed(2)}`;
             } else {
-              priceDisplay = "Contact for pricing";
+              priceDisplay = "";
             }
 
             return (
               <button
                 key={svc.id}
                 type="button"
-                className="svc-card svc-card--clickable"
+                className={`svc-card svc-card--clickable ${svc.available === false ? "svc-card--unavailable" : ""}`}
                 onClick={() => setCartService(svc)}
+                disabled={svc.available === false}
               >
+                {svc.available === false && (
+                  <span className="svc-card__unavailable">Currently unavailable</span>
+                )}
+                {svc.imageUrl && (
+                  <img className="svc-card__image" src={svc.imageUrl} alt={svc.name} loading="lazy" />
+                )}
                 {svc.category && (
                   <span className="svc-card__category">{svc.category}</span>
                 )}
@@ -837,7 +861,7 @@ function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
                 {svc.varieties?.length > 0 && (
                   <div className="svc-card__varieties">
                     <span className="svc-card__options-count">
-                      {svc.varieties.length} {svc.varieties.length === 1 ? "option" : "options"}
+                      {svc.varieties.length} {svc.varieties.length === 1 ? "variant" : "variants"}
                     </span>
                     {svc.varieties.slice(0, 3).map((v, i) => (
                       <span key={i} className="svc-card__variety-chip">
@@ -851,11 +875,16 @@ function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
                     )}
                   </div>
                 )}
-                <div className="svc-card__footer">
-                  <span className="svc-card__price">{priceDisplay}</span>
-                  {svc.unit && <span className="svc-card__unit">{svc.unit}</span>}
-                </div>
-                <span className="svc-card__cta">Order this service →</span>
+                {(priceDisplay || getServiceUnits(svc).length > 0) && (
+                  <div className="svc-card__footer">
+                    {priceDisplay && <span className="svc-card__price">{priceDisplay}</span>}
+                    {getServiceUnits(svc).length > 0 && (
+                      <span className="svc-card__unit">
+                        {getServiceUnits(svc).map(formatPerUnit).join(" / ")}
+                      </span>
+                    )}
+                  </div>
+                )}
               </button>
             );
           })}
@@ -867,7 +896,6 @@ function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
       {cartService && (
         <OrderCartModal
           initialService={cartService}
-          allServices={services}
           uid={uid}
           email={email}
           customerName={customerName}
@@ -891,11 +919,13 @@ function makeBlock(service) {
     service,
     singleQuantity: 1,
     checkedVarieties: {},
+    variantOptions: {},
+    selectedUnit: getServiceUnits(service).length === 1 ? getServiceUnits(service)[0] : "",
   };
 }
 
 function blockLines(block) {
-  const { service, singleQuantity, checkedVarieties } = block;
+  const { service, singleQuantity, checkedVarieties, selectedUnit, variantOptions } = block;
   if (!service.varieties?.length) {
     const unitPrice = service.price != null ? Number(service.price) : null;
     return [
@@ -903,6 +933,8 @@ function blockLines(block) {
         serviceId: service.id,
         serviceName: service.name,
         varietyName: "",
+        options: [],
+        unit: selectedUnit,
         quantity: Number(singleQuantity) || 0,
         unitPrice,
         lineTotal: unitPrice != null ? unitPrice * (Number(singleQuantity) || 0) : null,
@@ -917,6 +949,10 @@ function blockLines(block) {
       serviceId: service.id,
       serviceName: service.name,
       varietyName: variety.name,
+      options: (variety.serviceOptions || [])
+        .filter((option) => variantOptions[idx]?.[option.name])
+        .map((option) => ({ name: option.name, type: variantOptions[idx][option.name] })),
+      unit: selectedUnit,
       quantity: Number(qty) || 0,
       unitPrice,
       lineTotal: unitPrice != null ? unitPrice * (Number(qty) || 0) : null,
@@ -924,9 +960,8 @@ function blockLines(block) {
   });
 }
 
-function OrderCartModal({ initialService, allServices, uid, email, customerName, onClose, onSubmitted }) {
+function OrderCartModal({ initialService, uid, email, customerName, onClose, onSubmitted }) {
   const [blocks, setBlocks] = useState([makeBlock(initialService)]);
-  const [addServiceId, setAddServiceId] = useState("");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState([]);
   const [descriptionError, setDescriptionError] = useState("");
@@ -935,9 +970,6 @@ function OrderCartModal({ initialService, allServices, uid, email, customerName,
   const [submitting, setSubmitting] = useState(false);
   const [uploadNote, setUploadNote] = useState("");
   const [placedOrder, setPlacedOrder] = useState(null);
-
-  const usedServiceIds = new Set(blocks.map((b) => b.service.id));
-  const addableServices = allServices.filter((s) => !usedServiceIds.has(s.id));
 
   const allLines = blocks.flatMap(blockLines).filter((l) => l.quantity > 0);
   const grandTotal = allLines.some((l) => l.lineTotal == null)
@@ -967,20 +999,22 @@ function OrderCartModal({ initialService, allServices, uid, email, customerName,
     }));
   }
 
+  function setVariantOption(key, index, optionName, type) {
+    updateBlock(key, (b) => ({
+      ...b,
+      variantOptions: {
+        ...b.variantOptions,
+        [index]: { ...b.variantOptions[index], [optionName]: type },
+      },
+    }));
+  }
+
+  function setUnit(key, unit) {
+    updateBlock(key, (b) => ({ ...b, selectedUnit: unit }));
+  }
+
   function setSingleQty(key, qty) {
     updateBlock(key, (b) => ({ ...b, singleQuantity: qty }));
-  }
-
-  function removeBlock(key) {
-    setBlocks((prev) => prev.filter((b) => b.key !== key));
-  }
-
-  function addAnotherService() {
-    if (!addServiceId) return;
-    const svc = allServices.find((s) => s.id === addServiceId);
-    if (!svc) return;
-    setBlocks((prev) => [...prev, makeBlock(svc)]);
-    setAddServiceId("");
   }
 
   function handleFileChange(e) {
@@ -1009,6 +1043,23 @@ function OrderCartModal({ initialService, allServices, uid, email, customerName,
     if (allLines.length === 0) {
       setItemsError("Select at least one option and quantity.");
       valid = false;
+    } else {
+      const missing = blocks
+        .filter((b) => blockLines(b).some((l) => l.quantity > 0))
+        .flatMap((b) => [
+          ...(getServiceUnits(b.service).length > 0 && !b.selectedUnit
+            ? [`a per unit for ${b.service.name}`]
+            : []),
+          ...Object.keys(b.checkedVarieties).flatMap((idx) =>
+            (b.service.varieties[idx]?.serviceOptions || [])
+              .filter((o) => o.types?.length && !b.variantOptions[idx]?.[o.name])
+              .map((o) => `${o.name} for ${b.service.varieties[idx].name}`)
+          ),
+        ]);
+      if (missing.length > 0) {
+        setItemsError(`Please choose ${missing[0]}.`);
+        valid = false;
+      }
     }
     if (!description.trim()) {
       setDescriptionError("Please describe your order or add specifications.");
@@ -1082,27 +1133,35 @@ function OrderCartModal({ initialService, allServices, uid, email, customerName,
         <h3 className="order-modal__title">Build Your Order</h3>
 
         <form onSubmit={handleSubmit} className="order-form order-form--modal">
-          {blocks.map((block, blockIndex) => (
+          {blocks.map((block) => (
             <div key={block.key} className="cart-block">
               <div className="cart-block__header">
                 <span className="cart-block__name">{block.service.name}</span>
-                {blockIndex > 0 && (
-                  <button
-                    type="button"
-                    className="cart-block__remove"
-                    onClick={() => removeBlock(block.key)}
-                  >
-                    Remove
-                  </button>
-                )}
               </div>
+
+              {getServiceUnits(block.service).length > 0 && (
+                <div className="cart-option-row">
+                  <label className="field-label">Per unit</label>
+                  <select
+                    className="order-select"
+                    value={block.selectedUnit}
+                    onChange={(e) => setUnit(block.key, e.target.value)}
+                  >
+                    <option value="">Select per unit</option>
+                    {getServiceUnits(block.service).map((unit) => (
+                      <option key={unit} value={unit}>{formatPerUnit(unit)}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {block.service.varieties?.length > 0 ? (
                 <div className="cart-variety-list">
                   {block.service.varieties.map((v, i) => {
                     const checked = block.checkedVarieties[i] !== undefined;
                     return (
-                      <div key={i} className="cart-variety-row">
+                      <div key={i} className="cart-variety-item">
+                      <div className="cart-variety-row">
                         <label className="cart-variety-checkbox">
                           <input
                             type="checkbox"
@@ -1115,15 +1174,39 @@ function OrderCartModal({ initialService, allServices, uid, email, customerName,
                           </span>
                         </label>
                         {checked && (
-                          <input
-                            type="number"
-                            min="1"
-                            step="1"
-                            className="cart-variety-qty"
-                            value={block.checkedVarieties[i]}
-                            onChange={(e) => setVarietyQty(block.key, i, e.target.value)}
-                          />
+                          <label className="cart-variety-qty-label">
+                            <span>Quantity</span>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              className="cart-variety-qty"
+                              value={block.checkedVarieties[i]}
+                              onChange={(e) => setVarietyQty(block.key, i, e.target.value)}
+                            />
+                          </label>
                         )}
+                      </div>
+                      {checked &&
+                        v.serviceOptions
+                          ?.filter((option) => option.types?.length > 0)
+                          .map((option) => (
+                            <div key={option.name} className="cart-variety-option">
+                              <label className="field-label">{option.name}</label>
+                              <select
+                                className="order-select"
+                                value={block.variantOptions[i]?.[option.name] || ""}
+                                onChange={(e) =>
+                                  setVariantOption(block.key, i, option.name, e.target.value)
+                                }
+                              >
+                                <option value="">Select {option.name}</option>
+                                {option.types.map((type) => (
+                                  <option key={type} value={type}>{type}</option>
+                                ))}
+                              </select>
+                            </div>
+                          ))}
                       </div>
                     );
                   })}
@@ -1145,31 +1228,6 @@ function OrderCartModal({ initialService, allServices, uid, email, customerName,
           ))}
 
           <div className="field-error">{itemsError}</div>
-
-          {addableServices.length > 0 && (
-            <div className="cart-add-service-row">
-              <select
-                className="order-select"
-                value={addServiceId}
-                onChange={(e) => setAddServiceId(e.target.value)}
-              >
-                <option value="">+ Add another service...</option>
-                {addableServices.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="svc-variety-add-btn"
-                onClick={addAnotherService}
-                disabled={!addServiceId}
-              >
-                Add
-              </button>
-            </div>
-          )}
 
           {grandTotal != null && allLines.length > 0 && (
             <div className="order-modal__total">
@@ -1309,7 +1367,7 @@ function Receipt({ order, customerName, onClose }) {
           <div key={i} className="receipt__line">
             <span>
               {line.serviceName}
-              {line.varietyName ? ` (${line.varietyName})` : ""} x{line.quantity || 1}
+              {line.varietyName ? ` (${line.varietyName})` : ""}{lineOptionsSuffix(line)} x{line.quantity || 1}
             </span>
             <span>
               {line.lineTotal != null ? `₱${Number(line.lineTotal).toFixed(2)}` : "—"}
@@ -1357,6 +1415,7 @@ function OrderHistory({ uid, customerName }) {
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [cancellingId, setCancellingId] = useState(null);
 
   useEffect(() => {
     if (uid) loadOrders();
@@ -1380,6 +1439,24 @@ function OrderHistory({ uid, customerName }) {
     }
   }
 
+  async function handleCancel(order) {
+    if (!window.confirm("Cancel this order? This cannot be undone.")) return;
+    setCancellingId(order.id);
+    setError("");
+    try {
+      await cancelOrder(order.id);
+      setOrders((previous) => previous.filter((item) => item.id !== order.id));
+    } catch (err) {
+      setError(
+        err.code === "order-not-cancellable"
+          ? err.message
+          : "Failed to cancel the order. Please try again."
+      );
+    } finally {
+      setCancellingId(null);
+    }
+  }
+
   function statusLabel(s) {
     switch (s) {
       case "placed":
@@ -1389,9 +1466,11 @@ function OrderHistory({ uid, customerName }) {
       case "ready":
         return "Ready for Pickup";
       case "completed":
-        return "Completed";
+        return "Picked Up";
       case "needs_revision":
         return "Needs Revision";
+      case "cancelled":
+        return "Cancelled";
       default:
         return s || "Placed";
     }
@@ -1510,6 +1589,20 @@ function OrderHistory({ uid, customerName }) {
                       </a>
                     ))}
                   </div>
+                )}
+                {(order.status || "placed") === "placed" && (
+                  <button
+                    type="button"
+                    className="order-card__cancel-btn"
+                    disabled={cancellingId === order.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCancel(order);
+                    }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    {cancellingId === order.id ? "Cancelling..." : "Cancel order"}
+                  </button>
                 )}
               </div>
             );

@@ -1,4 +1,5 @@
 import "./PrintableReceipt.css";
+import { lineOptionsSuffix } from "../utils/orderLines";
 
 function getReceiptLines(order) {
   if (order.items?.length > 0) return order.items;
@@ -59,7 +60,7 @@ export default function PrintableReceipt({ order, customerName, onClose }) {
           <div key={index} className="printable-receipt__line">
             <span>
               {line.serviceName || "Service"}
-              {line.varietyName ? ` (${line.varietyName})` : ""} x{line.quantity || 1}
+              {line.varietyName ? ` (${line.varietyName})` : ""}{lineOptionsSuffix(line)} x{line.quantity || 1}
             </span>
             <span>
               {line.lineTotal != null ? `₱${Number(line.lineTotal).toFixed(2)}` : "-"}

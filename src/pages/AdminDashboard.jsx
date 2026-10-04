@@ -6,13 +6,14 @@ import {
   getAllServices,
   getAllServiceCategories,
   addServiceCategory,
+  deleteServiceCategory,
   addService,
   updateService,
   deleteService,
+  uploadServiceImage,
 } from "../services/servicesService";
-import { getAllOrders, updateOrderStatus, requestOrderRevision, deleteOrder } from "../services/ordersService";
+import { getAllOrders, getAllOrdersForReports, updateOrderStatus, requestOrderRevision, deleteOrder } from "../services/ordersService";
 import {
-  markAllUnreadMessagesRead,
   sendOrderRevisionMessage,
 } from "../services/messagingService";
 import DirectMessages from "../components/DirectMessages";
@@ -20,7 +21,11 @@ import PrintableReceipt from "../components/PrintableReceipt";
 import UnreadMessageBadge from "../components/UnreadMessageBadge";
 import SidebarCountBadge from "../components/SidebarCountBadge";
 import useSidebarOrderCounts from "../hooks/useSidebarOrderCounts";
+import ProfileInfo from "../components/ProfileInfo";
+import PickupOrders from "../components/PickupOrders";
+import OrderDetails from "../components/OrderDetails";
 import "./AdminDashboard.css";
+import { lineOptionsSuffix, getServiceUnits, formatPerUnit } from "../utils/orderLines";
 
 const ROLES = ["customer", "staff", "admin"];
 
@@ -145,6 +150,25 @@ export default function AdminDashboard() {
 
           <a
             href="#"
+            className={`nav-item ${view === "pickup" ? "nav-item--active" : ""}`}
+            onClick={(e) => {
+              e.preventDefault();
+              setView("pickup");
+              setSidebarOpen(false);
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20">
+              <path
+                fill="currentColor"
+                d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7Zm-2 8h14v10H5V10Z"
+              />
+            </svg>
+            Pickups
+            <SidebarCountBadge count={orderCounts.readyPickups} label="orders ready for pickup" />
+          </a>
+
+          <a
+            href="#"
             className={`nav-item ${view === "reports" ? "nav-item--active" : ""}`}
             onClick={(e) => {
               e.preventDefault();
@@ -168,11 +192,6 @@ export default function AdminDashboard() {
               e.preventDefault();
               setView("messages");
               setSidebarOpen(false);
-              if (user?.uid) {
-                markAllUnreadMessagesRead(user.uid).catch((error) => {
-                  console.error("Failed to mark messages as read:", error);
-                });
-              }
             }}
           >
             <svg viewBox="0 0 24 24" width="20" height="20">
@@ -187,7 +206,15 @@ export default function AdminDashboard() {
         </nav>
 
         <div className="sidebar__footer">
-          <div className="user-info">
+          <button
+            type="button"
+            className={`user-info user-info--button ${view === "profile" ? "user-info--active" : ""}`}
+            onClick={() => {
+              setView("profile");
+              setSidebarOpen(false);
+            }}
+            aria-label="Open personal information"
+          >
             <div className="user-avatar">
               {user?.photoURL && !profileImageFailed ? (
                 <img
@@ -220,7 +247,7 @@ export default function AdminDashboard() {
                 <span className="user-email">{user.email}</span>
               )}
             </div>
-          </div>
+          </button>
 
           <button className="logout-btn" onClick={handleLogout}>
             <svg viewBox="0 0 24 24" width="18" height="18">
@@ -246,8 +273,12 @@ export default function AdminDashboard() {
               ? "Services"
               : view === "orders"
               ? "Orders"
+              : view === "pickup"
+              ? "Pickups"
               : view === "reports"
               ? "Reports"
+              : view === "profile"
+              ? "Personal Information"
               : "Messages"}
           </h2>
         </header>
@@ -269,6 +300,10 @@ export default function AdminDashboard() {
         )}
 
         {view === "reports" && <ReportsManagement />}
+
+        {view === "pickup" && <PickupOrders />}
+
+        {view === "profile" && <ProfileInfo user={user} profile={profile} />}
 
         {view === "messages" && (
           <DirectMessages
@@ -349,7 +384,9 @@ function DashboardOverview({ onNavigate }) {
     completed: orders.filter((o) => o.status === "completed").length,
   };
 
-  const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
+  const totalRevenue = orders
+    .filter((o) => o.status !== "cancelled")
+    .reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
 
   const recentOrders = [...orders]
     .sort((a, b) => {
@@ -485,10 +522,10 @@ function DashboardOverview({ onNavigate }) {
           type="button"
           className="status-pill status-pill--completed status-pill--interactive"
           onClick={() => onNavigate("orders")}
-          aria-label={`View ${ordersByStatus.completed} completed orders`}
+          aria-label={`View ${ordersByStatus.completed} picked up orders`}
         >
           <span className="status-pill__count">{ordersByStatus.completed}</span>
-          <span className="status-pill__label">Completed</span>
+          <span className="status-pill__label">Picked Up</span>
         </button>
       </div>
 
@@ -543,18 +580,75 @@ function DashboardOverview({ onNavigate }) {
   );
 }
 
+const REPORT_PERIODS = [
+  { value: "day", label: "Day" },
+  { value: "week", label: "Week" },
+  { value: "month", label: "Month" },
+];
+
+// Weeks start on Monday.
+function getPeriodStart(date, period) {
+  if (period === "month") return new Date(date.getFullYear(), date.getMonth(), 1);
+  const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  if (period === "week") dayStart.setDate(dayStart.getDate() - ((dayStart.getDay() + 6) % 7));
+  return dayStart;
+}
+
+function getPeriodLabel(start, period) {
+  if (period === "month") {
+    return start.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  }
+  if (period === "week") {
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    const short = { month: "short", day: "numeric" };
+    return `${start.toLocaleDateString("en-US", short)} \u2013 ${end.toLocaleDateString("en-US", { ...short, year: "numeric" })}`;
+  }
+  return start.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function groupTransactions(orders, period) {
+  const groups = new Map();
+  orders.forEach((order) => {
+    const created = order.createdAt?.toDate ? order.createdAt.toDate() : null;
+    const start = created ? getPeriodStart(created, period) : null;
+    const key = start ? start.getTime() : "none";
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        label: start ? getPeriodLabel(start, period) : "No date",
+        sortValue: start ? start.getTime() : -Infinity,
+        orders: [],
+        total: 0,
+      });
+    }
+    const group = groups.get(key);
+    group.orders.push({ order, created });
+    group.total += order.status === "cancelled" ? 0 : Number(order.totalPrice) || 0;
+  });
+  return [...groups.values()]
+    .sort((a, b) => b.sortValue - a.sortValue)
+    .map((group) => ({
+      ...group,
+      orders: group.orders.sort(
+        (a, b) => (b.created?.getTime() || 0) - (a.created?.getTime() || 0)
+      ),
+    }));
+}
+
 function ReportsManagement() {
   const [orders, setOrders] = useState([]);
   const [users, setUsers] = useState([]);
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [period, setPeriod] = useState("day");
 
   useEffect(() => {
     async function loadReports() {
       try {
         const [allOrders, allUsers, allServices] = await Promise.all([
-          getAllOrders(),
+          getAllOrdersForReports(),
           getAllUsers(),
           getAllServices(),
         ]);
@@ -576,19 +670,16 @@ function ReportsManagement() {
   }
 
   const completedOrders = orders.filter((order) => order.status === "completed");
-  const revenue = orders.reduce((sum, order) => sum + (Number(order.totalPrice) || 0), 0);
+  const billableOrders = orders.filter((order) => order.status !== "cancelled");
+  const revenue = billableOrders.reduce((sum, order) => sum + (Number(order.totalPrice) || 0), 0);
   const completedRevenue = completedOrders.reduce(
     (sum, order) => sum + (Number(order.totalPrice) || 0),
     0
   );
   const customerCount = users.filter((user) => (user.role || "customer") === "customer").length;
-  const statusCounts = ORDER_STATUSES.map((status) => ({
-    status,
-    count: orders.filter((order) => (order.status || "placed") === status).length,
-  }));
   const serviceRows = services
     .map((service) => {
-      const matchingOrders = orders.filter((order) =>
+      const matchingOrders = billableOrders.filter((order) =>
         getOverviewOrderLines(order).some((line) => line.serviceName === service.name)
       );
       const serviceRevenue = matchingOrders.reduce(
@@ -598,6 +689,7 @@ function ReportsManagement() {
       return { ...service, orderCount: matchingOrders.length, revenue: serviceRevenue };
     })
     .sort((a, b) => b.orderCount - a.orderCount || b.revenue - a.revenue);
+  const transactionGroups = groupTransactions(orders, period);
 
   return (
     <div className="dashboard-content report-print-root">
@@ -620,17 +712,17 @@ function ReportsManagement() {
         <div className="stat-card">
           <span className="stat-card__label">Gross Revenue</span>
           <span className="stat-card__value">₱{revenue.toFixed(2)}</span>
-          <span className="stat-card__sub">from {orders.length} total orders</span>
+          <span className="stat-card__sub">from {billableOrders.length} total orders</span>
         </div>
         <div className="stat-card stat-card--accent">
-          <span className="stat-card__label">Completed Revenue</span>
+          <span className="stat-card__label">Picked Up Revenue</span>
           <span className="stat-card__value">₱{completedRevenue.toFixed(2)}</span>
-          <span className="stat-card__sub">from {completedOrders.length} completed orders</span>
+          <span className="stat-card__sub">from {completedOrders.length} picked up orders</span>
         </div>
         <div className="stat-card">
           <span className="stat-card__label">Average Order Value</span>
           <span className="stat-card__value">
-            ₱{orders.length ? (revenue / orders.length).toFixed(2) : "0.00"}
+            ₱{billableOrders.length ? (revenue / billableOrders.length).toFixed(2) : "0.00"}
           </span>
           <span className="stat-card__sub">across all orders</span>
         </div>
@@ -642,18 +734,6 @@ function ReportsManagement() {
       </div>
 
       <div className="report-grid">
-        <section className="report-panel">
-          <h3 className="dashboard-section__title">Order Status</h3>
-          <div className="report-status-list">
-            {statusCounts.map(({ status, count }) => (
-              <div className="report-status-row" key={status}>
-                <span>{statusLabel(status)}</span>
-                <strong>{count}</strong>
-              </div>
-            ))}
-          </div>
-        </section>
-
         <section className="report-panel">
           <h3 className="dashboard-section__title">Service Performance</h3>
           {serviceRows.length === 0 ? (
@@ -682,6 +762,104 @@ function ReportsManagement() {
           )}
         </section>
       </div>
+
+      <section className="report-panel report-transactions">
+        <div className="report-transactions__header">
+          <h3 className="dashboard-section__title">
+            Transactions by {REPORT_PERIODS.find((item) => item.value === period).label}
+          </h3>
+          <div className="report-period-toggle" role="group" aria-label="Group transactions by">
+            {REPORT_PERIODS.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                className={`report-period-btn ${period === item.value ? "report-period-btn--active" : ""}`}
+                aria-pressed={period === item.value}
+                onClick={() => setPeriod(item.value)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {orders.length === 0 ? (
+          <div className="um-empty">No transactions yet.</div>
+        ) : (
+          <div className="um-table-wrap report-table-wrap">
+            <table className="um-table">
+              <thead>
+                <tr>
+                  <th>{REPORT_PERIODS.find((item) => item.value === period).label}</th>
+                  <th>Transactions</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transactionGroups.map((group) => (
+                  <tr key={group.key}>
+                    <td>{group.label}</td>
+                    <td className="um-muted">{group.orders.length}</td>
+                    <td className="um-muted">₱{group.total.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="report-panel report-transactions">
+        <h3 className="dashboard-section__title">All Transactions</h3>
+        {orders.length === 0 ? (
+          <div className="um-empty">No transactions yet.</div>
+        ) : (
+          <div className="um-table-wrap report-table-wrap">
+            <table className="um-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th>Customer</th>
+                  <th>Items</th>
+                  <th>Status</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transactionGroups.flatMap((group) => group.orders).map(({ order, created }) => (
+                  <tr key={order.id}>
+                    <td className="um-muted">
+                      {created
+                        ? created.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" })
+                        : "—"}
+                    </td>
+                    <td className="um-muted">
+                      {created
+                        ? created.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+                        : "—"}
+                    </td>
+                    <td className="um-muted">{order.customerEmail || "—"}</td>
+                    <td>
+                      {getOverviewOrderLines(order)
+                          .map((line) => `${line.serviceName}${line.varietyName ? ` (${line.varietyName})` : ""}${lineOptionsSuffix(line)} x${line.quantity || 1}`)
+                        .join(", ") || "—"}
+                    </td>
+                    <td>
+                      <span className={`order-status order-status--${order.status || "placed"}`}>
+                        {statusLabel(order.status || "placed")}
+                      </span>
+                    </td>
+                    <td className="um-muted">
+                      {order.totalPrice != null ? `₱${Number(order.totalPrice).toFixed(2)}` : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -933,6 +1111,7 @@ function ServicesManagement() {
   const [categoryName, setCategoryName] = useState("");
   const [addingCategory, setAddingCategory] = useState(false);
   const [savingCategory, setSavingCategory] = useState(false);
+  const [deletingCategory, setDeletingCategory] = useState(null);
   const [modalService, setModalService] = useState(null); // null = closed, {} = add, {...} = edit
   const [newServiceCategory, setNewServiceCategory] = useState("");
   const [deletingId, setDeletingId] = useState(null);
@@ -970,6 +1149,19 @@ function ServicesManagement() {
     }
   }
 
+  async function handleToggleAvailability(svc) {
+    const nextAvailable = svc.available === false;
+    setError("");
+    try {
+      await updateService(svc.id, { available: nextAvailable });
+      setServices((prev) =>
+        prev.map((s) => (s.id === svc.id ? { ...s, available: nextAvailable } : s))
+      );
+    } catch (err) {
+      setError("Failed to update availability. Please try again.");
+    }
+  }
+
   function handleSaved(saved, isNew) {
     if (isNew) {
       setServices((prev) => [...prev, saved]);
@@ -1001,6 +1193,35 @@ function ServicesManagement() {
       setError("Failed to add category. Please try again.");
     } finally {
       setSavingCategory(false);
+    }
+  }
+
+  async function handleDeleteCategory(category) {
+    const categoryServices = services.filter(
+      (service) => service.category?.trim() === category.name,
+    );
+    const serviceCount = categoryServices.length;
+    const serviceMessage = serviceCount
+      ? ` Its ${serviceCount} ${serviceCount === 1 ? "service will" : "services will"} remain in the catalog but become uncategorized.`
+      : "";
+    if (!window.confirm(`Delete the ${category.name} category?${serviceMessage}`)) return;
+
+    setDeletingCategory(category.name);
+    setError("");
+    try {
+      const categoryIds = categoryRecords
+        .filter((record) => record.name === category.name)
+        .map((record) => record.id);
+      await deleteServiceCategory(categoryIds, categoryServices.map((service) => service.id));
+      setCategoryRecords((previous) => previous.filter((record) => record.name !== category.name));
+      setServices((previous) => previous.map((service) => (
+        service.category?.trim() === category.name ? { ...service, category: "" } : service
+      )));
+      if (categoryFilter === category.name) setCategoryFilter("all");
+    } catch (err) {
+      setError("Failed to delete category. Please try again.");
+    } finally {
+      setDeletingCategory(null);
     }
   }
 
@@ -1136,6 +1357,17 @@ function ServicesManagement() {
                   </svg>
                   Add service
                 </button>
+                {group.name && (
+                  <button
+                    type="button"
+                    className="svc-category-delete"
+                    onClick={() => handleDeleteCategory({ name: group.name })}
+                    disabled={deletingCategory === group.name}
+                    aria-label={`Delete ${group.name} category`}
+                  >
+                    {deletingCategory === group.name ? "Deleting..." : "Delete category"}
+                  </button>
+                )}
               </header>
 
               {group.services.length === 0 ? (
@@ -1144,11 +1376,29 @@ function ServicesManagement() {
                 <div className="svc-manage-grid">
                   {group.services.map((svc) => (
                     <article key={svc.id} className="svc-manage-card">
+                      {svc.imageUrl && (
+                        <img className="svc-manage-card__image" src={svc.imageUrl} alt={svc.name} loading="lazy" />
+                      )}
                       <div className="svc-manage-card__header">
                         <div className="svc-manage-card__identity">
                           <h3>{svc.name}</h3>
+                          {svc.available === false && (
+                            <span className="svc-unavailable-tag">Unavailable</span>
+                          )}
+                          {getServiceUnits(svc).length > 0 && (
+                            <span className="svc-manage-card__unit">
+                              {getServiceUnits(svc).map(formatPerUnit).join(" / ")}
+                            </span>
+                          )}
                         </div>
                         <div className="svc-actions">
+                          <button
+                            type="button"
+                            className="svc-edit-btn"
+                            onClick={() => handleToggleAvailability(svc)}
+                          >
+                            {svc.available === false ? "Set available" : "Set unavailable"}
+                          </button>
                           <button
                             type="button"
                             className="svc-edit-btn"
@@ -1167,29 +1417,37 @@ function ServicesManagement() {
                         </div>
                       </div>
 
-                      <p className="svc-manage-card__description">
-                        {svc.description || "No description provided."}
-                      </p>
-
-                      <div className="svc-manage-card__price-row">
-                        <div>
-                          <span className="svc-manage-card__eyebrow">Base price</span>
-                          <strong>{svc.price != null ? `₱${Number(svc.price).toFixed(2)}` : "Contact for pricing"}</strong>
-                        </div>
-                        {svc.unit && <span className="svc-manage-card__unit">per {svc.unit}</span>}
-                      </div>
+                      {svc.description && (
+                        <p className="svc-manage-card__description">{svc.description}</p>
+                      )}
 
                       {svc.varieties?.length > 0 && (
-                        <div className="svc-manage-card__varieties">
-                          <span className="svc-manage-card__eyebrow">Options and prices</span>
-                          <div className="svc-variety-tags">
-                            {svc.varieties.map((variety, index) => (
-                              <span key={`${svc.id}-${variety.name}-${index}`} className="svc-variety-tag">
-                                {variety.name}
-                                {variety.price != null ? ` · ₱${Number(variety.price).toFixed(2)}` : ""}
-                              </span>
-                            ))}
-                          </div>
+                        <div className="svc-manage-card__variants">
+                          <span className="svc-manage-card__eyebrow">Variants</span>
+                          {svc.varieties.map((variety, index) => (
+                            <div key={`${svc.id}-${variety.name}-${index}`} className="svc-variant-item">
+                              <div className="svc-variant-item__head">
+                                <span>{variety.name}</span>
+                                <span className="svc-variant-item__price">
+                                  {variety.price != null ? `₱${Number(variety.price).toFixed(2)}` : "—"}
+                                </span>
+                              </div>
+                              {variety.serviceOptions?.length > 0 && (
+                                <dl className="svc-variant-item__options">
+                                  {variety.serviceOptions.map((option) => (
+                                    <div key={option.name} className="svc-variant-item__option">
+                                      <dt>{option.name}</dt>
+                                      <dd>
+                                        {option.types.map((type) => (
+                                          <span key={type} className="svc-variety-tag">{type}</span>
+                                        ))}
+                                      </dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       )}
                     </article>
@@ -1214,59 +1472,52 @@ function ServicesManagement() {
   );
 }
 
-// A simple removable-tag input for plain option lists (no price),
-// used for the print specification fields below (Paper Size, Paper
-// Type, Color, Printing Side, Binding).
-function TagListField({ label, hint, placeholder, values, onChange }) {
-  const [input, setInput] = useState("");
+function OptionTypesEditor({ option, onTypesChange, onRemove }) {
+  const [typeInput, setTypeInput] = useState("");
 
-  function add() {
-    const trimmed = input.trim();
-    if (!trimmed || values.includes(trimmed)) {
-      setInput("");
-      return;
-    }
-    onChange([...values, trimmed]);
-    setInput("");
-  }
-
-  function remove(v) {
-    onChange(values.filter((item) => item !== v));
+  function addType() {
+    const trimmed = typeInput.trim();
+    setTypeInput("");
+    if (!trimmed || option.types.some((type) => type.toLowerCase() === trimmed.toLowerCase())) return;
+    onTypesChange([...option.types, trimmed]);
   }
 
   return (
-    <div className="tag-field">
-      <label className="field-label">
-        {label} {hint && <span className="field-label__hint">({hint})</span>}
-      </label>
+    <div className="svc-option-group">
+      <div className="svc-option-group__header">
+        <strong>{option.name}</strong>
+        <button type="button" className="svc-option-group__remove" onClick={onRemove}>
+          Remove option
+        </button>
+      </div>
       <div className="svc-variety-input-row">
         <input
           type="text"
           className="order-select"
-          placeholder={placeholder}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
+          placeholder={`Add a type for ${option.name}`}
+          value={typeInput}
+          onChange={(e) => setTypeInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              add();
+              addType();
             }
           }}
         />
-        <button type="button" className="svc-variety-add-btn" onClick={add}>
-          Add
+        <button type="button" className="svc-variety-add-btn" onClick={addType}>
+          Add type
         </button>
       </div>
-      {values.length > 0 && (
+      {option.types.length > 0 && (
         <div className="svc-variety-tags svc-variety-tags--editable">
-          {values.map((v) => (
-            <span key={v} className="svc-variety-tag">
-              {v}
+          {option.types.map((type) => (
+            <span key={type} className="svc-variety-tag">
+              {type}
               <button
                 type="button"
                 className="svc-variety-remove"
-                onClick={() => remove(v)}
-                aria-label={`Remove ${v}`}
+                onClick={() => onTypesChange(option.types.filter((item) => item !== type))}
+                aria-label={`Remove ${type}`}
               >
                 ✕
               </button>
@@ -1278,24 +1529,64 @@ function TagListField({ label, hint, placeholder, values, onChange }) {
   );
 }
 
+function ServiceOptionsField({ options, onChange }) {
+  const [optionName, setOptionName] = useState("");
+
+  function addOption() {
+    const trimmed = optionName.trim();
+    setOptionName("");
+    if (!trimmed || options.some((option) => option.name.toLowerCase() === trimmed.toLowerCase())) return;
+    onChange([...options, { name: trimmed, types: [] }]);
+  }
+
+  return (
+    <div className="svc-options-field">
+      <label className="field-label">Option name</label>
+      <div className="svc-variety-input-row">
+        <input
+          type="text"
+          className="order-select"
+          placeholder="e.g. Paper Size, Color, Binding"
+          value={optionName}
+          onChange={(e) => setOptionName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addOption();
+            }
+          }}
+        />
+        <button type="button" className="svc-variety-add-btn" onClick={addOption}>
+          Add option
+        </button>
+      </div>
+      {options.map((option, index) => (
+        <OptionTypesEditor
+          key={option.name}
+          option={option}
+          onTypesChange={(types) =>
+            onChange(options.map((item, i) => (i === index ? { ...item, types } : item)))
+          }
+          onRemove={() => onChange(options.filter((_, i) => i !== index))}
+        />
+      ))}
+    </div>
+  );
+}
+
 function ServiceModal({ initialService, initialCategory = "", categories = [], onClose, onSaved }) {
   const isEdit = !!initialService;
 
   const [name, setName] = useState(initialService?.name || "");
   const [category, setCategory] = useState(initialService?.category || initialCategory);
   const [description, setDescription] = useState(initialService?.description || "");
-  const [price, setPrice] = useState(
-    initialService?.price != null ? String(initialService.price) : ""
-  );
-  const [unit, setUnit] = useState(initialService?.unit || "");
+  const [unit, setUnit] = useState(initialService ? getServiceUnits(initialService)[0] || "" : "");
   const [varieties, setVarieties] = useState(initialService?.varieties || []);
   const [varietyName, setVarietyName] = useState("");
   const [varietyPrice, setVarietyPrice] = useState("");
-
-  // Print specification option groups
-  const [paperSizes, setPaperSizes] = useState(initialService?.paperSizes || []);
-  const [colorOptions, setColorOptions] = useState(initialService?.colorOptions || []);
-  const [printingSides, setPrintingSides] = useState(initialService?.printingSides || []);
+  const [imageUrl, setImageUrl] = useState(initialService?.imageUrl || "");
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [available, setAvailable] = useState(initialService?.available !== false);
 
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -1304,13 +1595,13 @@ function ServiceModal({ initialService, initialCategory = "", categories = [], o
     const trimmedName = varietyName.trim();
     if (!trimmedName) return;
     if (varietyPrice && isNaN(Number(varietyPrice))) {
-      setFormError("Variety price must be a number.");
+      setFormError("Variant price must be a number.");
       return;
     }
     setFormError("");
     setVarieties((prev) => [
       ...prev,
-      { name: trimmedName, price: varietyPrice ? Number(varietyPrice) : null },
+      { name: trimmedName, price: varietyPrice ? Number(varietyPrice) : null, serviceOptions: [] },
     ]);
     setVarietyName("");
     setVarietyPrice("");
@@ -1318,6 +1609,32 @@ function ServiceModal({ initialService, initialCategory = "", categories = [], o
 
   function removeVariety(index) {
     setVarieties((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateVariety(index, patch) {
+    setVarieties((prev) => prev.map((variety, i) => (i === index ? { ...variety, ...patch } : variety)));
+  }
+
+  function updateVarietyOptions(index, nextOptions) {
+    setVarieties((prev) =>
+      prev.map((variety, i) => (i === index ? { ...variety, serviceOptions: nextOptions } : variety))
+    );
+  }
+
+  async function handleImageChange(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setFormError("");
+    setUploadingImage(true);
+    try {
+      setImageUrl(await uploadServiceImage(file));
+    } catch (err) {
+      setFormError(err.message || "Image upload failed.");
+    } finally {
+      setUploadingImage(false);
+    }
   }
 
   async function handleSubmit(e) {
@@ -1329,8 +1646,8 @@ function ServiceModal({ initialService, initialCategory = "", categories = [], o
       setFormError("Service name is required.");
       return;
     }
-    if (price && isNaN(Number(price))) {
-      setFormError("Base price must be a number.");
+    if (varieties.some((variety) => !variety.name.trim())) {
+      setFormError("Every variant needs a name.");
       return;
     }
 
@@ -1340,12 +1657,12 @@ function ServiceModal({ initialService, initialCategory = "", categories = [], o
         name: trimmedName,
         category: category.trim(),
         description: description.trim(),
-        price: price ? Number(price) : null,
-        unit: unit.trim(),
-        varieties,
-        paperSizes,
-        colorOptions,
-        printingSides,
+        price: null,
+        units: unit.trim() ? [unit.trim()] : [],
+        unit: "",
+        varieties: varieties.map((variety) => ({ ...variety, name: variety.name.trim() })),
+        imageUrl,
+        available,
       };
 
       if (isEdit) {
@@ -1427,49 +1744,63 @@ function ServiceModal({ initialService, initialCategory = "", categories = [], o
               onChange={(e) => setDescription(e.target.value)}
               onKeyDown={handleDescriptionKeyDown}
             />
+
+            <label className="svc-availability">
+              <input
+                type="checkbox"
+                checked={available}
+                onChange={(e) => setAvailable(e.target.checked)}
+              />
+              <span>
+                Available for ordering
+                <small>Uncheck to show this service as unavailable to customers.</small>
+              </span>
+            </label>
+
+            <label className="field-label" htmlFor="svcImage">
+              Image <span className="field-label__hint">(optional, JPG/PNG/WebP up to 5 MB)</span>
+            </label>
+            {imageUrl && (
+              <div className="svc-image-preview">
+                <img src={imageUrl} alt="Service preview" />
+                <button type="button" className="svc-option-group__remove" onClick={() => setImageUrl("")}>
+                  Remove image
+                </button>
+              </div>
+            )}
+            <input
+              id="svcImage"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="order-select"
+              onChange={handleImageChange}
+              disabled={uploadingImage}
+            />
+            {uploadingImage && <span className="svc-modal-section__hint">Uploading image...</span>}
           </div>
 
           {/* ---------- Pricing ---------- */}
           <div className="svc-modal-section">
             <h4 className="svc-modal-section__title">Pricing</h4>
 
-            <div className="svc-form__row--split">
-              <div className="svc-form__col">
-                <label className="field-label" htmlFor="svcPrice">
-                  Base Price <span className="field-label__hint">(optional)</span>
-                </label>
-                <input
-                  id="svcPrice"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className="order-select"
-                  placeholder="e.g. 5"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                />
-              </div>
-              <div className="svc-form__col">
-                <label className="field-label" htmlFor="svcUnit">Unit</label>
-                <input
-                  id="svcUnit"
-                  type="text"
-                  className="order-select"
-                  placeholder="e.g. per page"
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
-                />
-              </div>
-            </div>
+            <label className="field-label" htmlFor="svcUnit">Per Unit</label>
+            <input
+              id="svcUnit"
+              type="text"
+              className="order-select"
+              placeholder="e.g. page"
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+            />
 
             <label className="field-label">
-              Varieties <span className="field-label__hint">(each with its own price)</span>
+              Variants <span className="field-label__hint">(each with its own price)</span>
             </label>
             <div className="svc-variety-input-row">
               <input
                 type="text"
                 className="order-select"
-                placeholder="Variety name (e.g. Rush Order)"
+                placeholder="Variant name (e.g. Rush Order)"
                 value={varietyName}
                 onChange={(e) => setVarietyName(e.target.value)}
                 onKeyDown={(e) => {
@@ -1499,56 +1830,54 @@ function ServiceModal({ initialService, initialCategory = "", categories = [], o
               </button>
             </div>
             {varieties.length > 0 && (
-              <div className="svc-variety-tags svc-variety-tags--editable">
+              <div className="svc-variant-list">
                 {varieties.map((v, i) => (
-                  <span key={i} className="svc-variety-tag">
-                    {v.name}
-                    {v.price != null ? ` · ₱${Number(v.price).toFixed(2)}` : ""}
-                    <button
-                      type="button"
-                      className="svc-variety-remove"
-                      onClick={() => removeVariety(i)}
-                      aria-label={`Remove ${v.name}`}
-                    >
-                      ✕
-                    </button>
-                  </span>
+                  <div key={i} className="svc-variant-block">
+                    <div className="svc-option-group__header">
+                      <div className="svc-variant-edit-row">
+                        <input
+                          type="text"
+                          className="order-select"
+                          aria-label="Variant name"
+                          value={v.name}
+                          onChange={(e) => updateVariety(i, { name: e.target.value })}
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="order-select svc-variety-price-input"
+                          aria-label={`Price for ${v.name}`}
+                          placeholder="Price"
+                          value={v.price ?? ""}
+                          onChange={(e) =>
+                            updateVariety(i, { price: e.target.value === "" ? null : Number(e.target.value) })
+                          }
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="svc-option-group__remove"
+                        onClick={() => removeVariety(i)}
+                        aria-label={`Remove ${v.name}`}
+                      >
+                        Remove variant
+                      </button>
+                    </div>
+                    <span className="svc-modal-section__hint">Service options for {v.name}</span>
+                    <ServiceOptionsField
+                      options={v.serviceOptions || []}
+                      onChange={(next) => updateVarietyOptions(i, next)}
+                    />
+                  </div>
                 ))}
               </div>
             )}
           </div>
 
-          {/* ---------- Print Specifications ---------- */}
-          <div className="svc-modal-section">
-            <h4 className="svc-modal-section__title">Print Specifications</h4>
-            <p className="svc-modal-section__hint">
-              Define the options a customer can choose from when ordering this
-              service. Leave a group empty if it doesn't apply.
-            </p>
-
-            <TagListField
-              label="Paper Size"
-              placeholder="e.g. A4"
-              values={paperSizes}
-              onChange={setPaperSizes}
-            />
-            <TagListField
-              label="Color"
-              placeholder="e.g. Colored"
-              values={colorOptions}
-              onChange={setColorOptions}
-            />
-            <TagListField
-              label="Printing Side"
-              placeholder="e.g. Single-sided"
-              values={printingSides}
-              onChange={setPrintingSides}
-            />
-          </div>
-
           <div className="field-error">{formError}</div>
 
-          <button type="submit" className="login-btn order-submit-btn" disabled={saving}>
+          <button type="submit" className="login-btn order-submit-btn" disabled={saving || uploadingImage}>
             {saving ? "Saving..." : isEdit ? "Save Changes" : "Add Service"}
           </button>
         </form>
@@ -1557,7 +1886,7 @@ function ServiceModal({ initialService, initialCategory = "", categories = [], o
   );
 }
 
-const ORDER_STATUSES = ["placed", "printing", "ready", "completed", "needs_revision"];
+const ORDER_STATUSES = ["placed", "printing", "ready", "completed", "needs_revision", "cancelled"];
 
 function statusLabel(s) {
   switch (s) {
@@ -1568,12 +1897,20 @@ function statusLabel(s) {
     case "ready":
       return "Ready for Pickup";
     case "completed":
-      return "Completed";
+      return "Picked Up";
     case "needs_revision":
       return "Needs Revision";
+    case "cancelled":
+      return "Cancelled";
     default:
       return s || "Placed";
   }
+}
+
+function summarizeOrder(order) {
+  const lines = getOverviewOrderLines(order);
+  if (lines.length > 1) return `${lines[0].serviceName} + ${lines.length - 1} more`;
+  return lines[0]?.serviceName || "Order";
 }
 
 function OrderManagement({ sender }) {
@@ -1585,6 +1922,13 @@ function OrderManagement({ sender }) {
   const [savedId, setSavedId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [receiptOrder, setReceiptOrder] = useState(null);
+  const [detailsOrder, setDetailsOrder] = useState(null);
+
+  // Clicks on the card's own controls shouldn't open the details.
+  function handleCardClick(event, order) {
+    if (event.target.closest("button, select, a, textarea, input, label")) return;
+    setDetailsOrder(order);
+  }
 
   useEffect(() => {
     loadOrders();
@@ -1643,6 +1987,9 @@ function OrderManagement({ sender }) {
         await updateOrderStatus(orderId, status);
       }
       setSavedId(orderId);
+      if (status === "cancelled") {
+        setOrders((prev) => prev.filter((order) => order.id !== orderId));
+      }
       setTimeout(() => setSavedId(null), 2000);
     } catch (err) {
       setError("Failed to update status. Please try again.");
@@ -1654,7 +2001,7 @@ function OrderManagement({ sender }) {
   async function handleDeleteOrder(order) {
     if (order.status !== "completed") return;
     const confirmed = window.confirm(
-      `Delete the completed order${order.referenceId ? ` ${order.referenceId}` : ""}? This cannot be undone.`
+      `Delete the picked up order${order.referenceId ? ` ${order.referenceId}` : ""}? This cannot be undone.`
     );
     if (!confirmed) return;
 
@@ -1735,10 +2082,21 @@ function OrderManagement({ sender }) {
       ) : (
         <div className="ord-list">
           {filteredOrders.map((order) => (
-            <div key={order.id} className="ord-card">
+            <div
+              key={order.id}
+              className="ord-card ord-card--clickable"
+              onClick={(event) => handleCardClick(event, order)}
+              onKeyDown={(event) => {
+                if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+                  event.preventDefault();
+                  setDetailsOrder(order);
+                }
+              }}
+              tabIndex={0}
+            >
               <div className="ord-card__header">
                 <div>
-                  <span className="ord-card__service">{order.serviceName || "Service"}</span>
+                  <span className="ord-card__service">{summarizeOrder(order)}</span>
                   <span className="ord-card__date">{formatDate(order.createdAt)}</span>
                 </div>
                 <span className={`order-status order-status--${order.status || "placed"}`}>
@@ -1844,6 +2202,10 @@ function OrderManagement({ sender }) {
             </div>
           ))}
         </div>
+      )}
+
+      {detailsOrder && (
+        <OrderDetails order={detailsOrder} onClose={() => setDetailsOrder(null)} />
       )}
 
       {receiptOrder && (

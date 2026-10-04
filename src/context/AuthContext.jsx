@@ -34,12 +34,18 @@ export function AuthProvider({ children }) {
     return firebaseSignOut(auth);
   }
 
+  async function refreshProfile() {
+    if (!auth.currentUser) return;
+    setProfile(await getUserProfile(auth.currentUser.uid));
+  }
+
   const value = {
     user,
     profile,
     role,
     loading,
     logout,
+    refreshProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

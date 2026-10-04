@@ -66,9 +66,26 @@
 }
 
 .direct-messages__contact-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 13px;
   font-weight: 700;
   overflow-wrap: anywhere;
+}
+
+.direct-messages__unread {
+  flex: 0 0 auto;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #e5484d;
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
 }
 
 .direct-messages__contact-meta {

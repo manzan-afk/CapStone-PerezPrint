@@ -1,0 +1,68 @@
+/* Shared look for every dashboard page (admin, staff, customer), matching the Personal Information page. */
+
+/* White page header with the shop logo */
+.dashboard-layout .dashboard-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 84px;
+  padding: 24px 36px;
+}
+
+.dashboard-layout .dashboard-header::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 36px;
+  width: 52px;
+  height: 52px;
+  transform: translateY(-50%);
+  background: url("/logo.png") center / contain no-repeat;
+}
+
+/* Section headings */
+.dashboard-layout .dashboard-section__title {
+  color: #1b2436;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Cards share one radius, border and shadow */
+.dashboard-layout .stat-card,
+.dashboard-layout .svc-manage-card,
+.dashboard-layout .svc-card,
+.dashboard-layout .order-card,
+.dashboard-layout .ord-card,
+.dashboard-layout .order-notification,
+.dashboard-layout .report-status-list,
+.dashboard-layout .svc-category-form,
+.dashboard-layout .um-table-wrap,
+.dashboard-layout .pickup-banner {
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(20, 25, 40, 0.04);
+}
+
+.dashboard-layout .um-empty {
+  border-radius: 14px;
+}
+
+/* Table headers read like the card section labels */
+.dashboard-layout .um-table th {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 760px) {
+  .dashboard-layout .dashboard-header {
+    min-height: 68px;
+    padding: 18px 20px;
+  }
+
+  .dashboard-layout .dashboard-header::after {
+    right: 20px;
+    width: 40px;
+    height: 40px;
+  }
+}

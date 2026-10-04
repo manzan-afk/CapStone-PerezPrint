@@ -15,6 +15,7 @@ import {
   orderBy,
   serverTimestamp,
   onSnapshot,
+  runTransaction,
 } from "firebase/firestore";
 import { db } from "../firebase-config";
 
@@ -158,7 +159,38 @@ export function updateOrderStatus(orderId, status) {
   if (status === "ready") {
     updates.pickupReadyAt = serverTimestamp();
   }
+  if (status === "cancelled") {
+    // Hidden from order lists but kept for reports.
+    updates.isArchived = true;
+    updates.archivedAt = serverTimestamp();
+  }
   return updateDoc(doc(db, "orders", orderId), updates);
+}
+
+/**
+ * Cancels an order, only if staff haven't started on it yet (status "placed").
+ * @param {string} orderId
+ * @returns {Promise<void>}
+ */
+export function cancelOrder(orderId) {
+  const orderRef = doc(db, "orders", orderId);
+  return runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(orderRef);
+    if (!snapshot.exists() || (snapshot.data().status || "placed") !== "placed") {
+      const error = new Error(
+        "This order can no longer be cancelled because it is already being processed."
+      );
+      error.code = "order-not-cancellable";
+      throw error;
+    }
+    transaction.update(orderRef, {
+      status: "cancelled",
+      statusUpdatedAt: serverTimestamp(),
+      cancelledAt: serverTimestamp(),
+      isArchived: true,
+      archivedAt: serverTimestamp(),
+    });
+  });
 }
 
 /**
@@ -185,6 +217,19 @@ export async function getAllOrders() {
   const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
   const snapshot = await getDocs(q);
   return mapVisibleOrders(snapshot);
+}
+
+/**
+ * Fetches every order for reports, including cancelled orders that are
+ * archived out of the regular order lists.
+ * @returns {Promise<Array<object>>}
+ */
+export async function getAllOrdersForReports() {
+  const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+  const snapshot = await getDocs(q);
+  return snapshot.docs
+    .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+    .filter((order) => !order.isArchived || order.status === "cancelled");
 }
 
 /**

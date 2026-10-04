@@ -541,6 +541,12 @@
   color: #b3261e;
 }
 
+.order-status--cancelled {
+  background: #eef1f5;
+  color: #6b7280;
+  text-decoration: line-through;
+}
+
 .ord-card__staff-note {
   background: #fdecea;
   border: 1px solid #f5c2c0;

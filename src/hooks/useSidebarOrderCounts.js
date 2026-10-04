@@ -62,7 +62,9 @@ export default function useSidebarOrderCounts(uid, role) {
     : { orders: [], notificationsViewedAt: null };
   const { orders, notificationsViewedAt } = currentState;
   const readyPickups = orders.filter((order) => order.status === "ready").length;
-  const activeOrders = orders.filter((order) => order.status !== "completed").length;
+  const activeOrders = orders.filter(
+    (order) => order.status !== "completed" && order.status !== "cancelled"
+  ).length;
   const ordersNeedingAction = orders.filter((order) => (order.status || "placed") === "placed").length;
   const unreadOrderNotifications = notificationsViewedAt
     ? orders.filter((order) => {

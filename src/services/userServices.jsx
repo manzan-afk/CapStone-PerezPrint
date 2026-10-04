@@ -57,6 +57,17 @@ export function updateUserProfile(uid, data) {
 }
 
 /**
+ * Saves a user's first and last name, creating the profile document if needed.
+ * @param {string} uid - Firebase Auth UID
+ * @param {string} firstName
+ * @param {string} lastName
+ * @returns {Promise<void>}
+ */
+export function saveUserName(uid, firstName, lastName) {
+  return setDoc(doc(db, "users", uid), { firstName, lastName }, { merge: true });
+}
+
+/**
  * Fetches every user profile document — for admin user management.
  * @returns {Promise<Array<object>>} array of profiles, each including its `id` (UID)
  */

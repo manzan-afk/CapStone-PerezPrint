@@ -9,6 +9,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../firebase-config";
+import { lineOptionsSuffix } from "../utils/orderLines";
 
 export function getConversationId(firstUid, secondUid) {
   return [firstUid, secondUid]
@@ -98,37 +99,50 @@ export function subscribeDirectMessages(uid, conversationId, onMessages, onError
   );
 }
 
-export function subscribeUnreadMessageCount(uid, onCount, onError) {
+function timestampMillis(timestamp) {
+  return timestamp?.toMillis?.() || timestamp?.toDate?.()?.getTime() || 0;
+}
+
+/**
+ * Subscribes to unread incoming message counts, keyed by conversation id.
+ * A message is unread until its conversation has been opened after it arrived.
+ */
+export function subscribeUnreadByConversation(uid, onCounts, onError) {
   const unreadQuery = query(
     collection(db, "messages"),
     where("recipientId", "==", uid)
   );
   let messages = [];
-  let messagesReadAt = 0;
-  const emitUnreadCount = () => {
-    const unreadCount = messages.filter((message) => {
+  let allReadAt = 0;
+  let conversationReadAt = {};
+  const emitCounts = () => {
+    const counts = {};
+    messages.forEach((message) => {
       const data = message.data();
-      if (data.readAt) return false;
-      const createdAt = data.createdAt?.toMillis?.() || data.createdAt?.toDate?.()?.getTime() || 0;
-      return createdAt > messagesReadAt;
-    }).length;
-    onCount(unreadCount);
+      if (data.readAt) return;
+      const readAt = Math.max(allReadAt, timestampMillis(conversationReadAt[data.conversationId]));
+      if (timestampMillis(data.createdAt) > readAt) {
+        counts[data.conversationId] = (counts[data.conversationId] || 0) + 1;
+      }
+    });
+    onCounts(counts);
   };
 
   const stopMessages = onSnapshot(
     unreadQuery,
     (snapshot) => {
       messages = snapshot.docs;
-      emitUnreadCount();
+      emitCounts();
     },
     onError
   );
   const stopReadState = onSnapshot(
     doc(db, "users", uid),
     (snapshot) => {
-      const timestamp = snapshot.data()?.messagesReadAt;
-      messagesReadAt = timestamp?.toMillis?.() || timestamp?.toDate?.()?.getTime() || 0;
-      emitUnreadCount();
+      const data = snapshot.data();
+      allReadAt = timestampMillis(data?.messagesReadAt);
+      conversationReadAt = data?.conversationReadAt || {};
+      emitCounts();
     },
     onError
   );
@@ -139,11 +153,19 @@ export function subscribeUnreadMessageCount(uid, onCount, onError) {
   };
 }
 
-export async function markAllUnreadMessagesRead(uid) {
-  if (!uid) return;
+export function subscribeUnreadMessageCount(uid, onCount, onError) {
+  return subscribeUnreadByConversation(
+    uid,
+    (counts) => onCount(Object.values(counts).reduce((sum, count) => sum + count, 0)),
+    onError
+  );
+}
+
+export async function markConversationRead(uid, conversationId) {
+  if (!uid || !conversationId) return;
   await setDoc(
     doc(db, "users", uid),
-    { messagesReadAt: serverTimestamp() },
+    { conversationReadAt: { [conversationId]: serverTimestamp() } },
     { merge: true }
   );
 }
@@ -195,8 +217,8 @@ export function sendOrderRevisionMessage({ order, sender, note }) {
   const orderLines = lines.length
     ? lines.map((line) => {
         const service = line.serviceName || "Service";
-        const variety = line.varietyName ? ` (${line.varietyName})` : "";
-        const quantity = `${line.quantity || 1}${line.unit ? ` ${line.unit}` : ""}`;
+        const variety = `${line.varietyName ? ` (${line.varietyName})` : ""}${lineOptionsSuffix(line)}`;
+        const quantity = line.quantity || 1;
         const lineTotal = line.lineTotal != null
           ? ` - ₱${Number(line.lineTotal).toFixed(2)}`
           : "";

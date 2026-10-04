@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import {
   getConversationId,
-  markAllUnreadMessagesRead,
+  markConversationRead,
   sendDirectMessage,
   subscribeConversations,
   subscribeDirectMessages,
   subscribeMessageProfiles,
+  subscribeUnreadByConversation,
 } from "../services/messagingService";
 import MessageFilePicker from "./MessageFilePicker";
 import "./DirectMessages.css";
@@ -30,6 +31,7 @@ function roleLabel(role) {
 export default function DirectMessages({ uid, displayName, role }) {
   const [profiles, setProfiles] = useState([]);
   const [conversations, setConversations] = useState([]);
+  const [unreadCounts, setUnreadCounts] = useState({});
   const [activeUid, setActiveUid] = useState("");
   const [messages, setMessages] = useState([]);
 const [attachment, setAttachment] = useState(null);
@@ -58,12 +60,24 @@ const [attachment, setAttachment] = useState(null);
       setError("");
     }, onError);
     const stopConversations = subscribeConversations(uid, setConversations, onError);
+    const stopUnread = subscribeUnreadByConversation(uid, setUnreadCounts, onError);
 
     return () => {
       stopProfiles();
       stopConversations();
+      stopUnread();
     };
   }, [uid]);
+
+  // Opening a conversation (or receiving a message while it's open) marks it read.
+  useEffect(() => {
+    if (!uid || !activeUid) return;
+    if (!messages.some((message) => message.senderId !== uid)) return;
+
+    markConversationRead(uid, getConversationId(uid, activeUid)).catch((readError) => {
+      console.error("Failed to mark conversation as read:", readError);
+    });
+  }, [messages, activeUid, uid]);
 
   useEffect(() => {
     if (!uid || !activeUid) return undefined;
@@ -131,12 +145,6 @@ function selectContact(profile) {
   setAttachment(null);
   setError("");
   setLoadingMessages(true);
-  markAllUnreadMessagesRead(uid).catch((readError) => {
-    console.error("Failed to mark messages as read:", readError);
-    setError(readError.code === "permission-denied"
-      ? "Messaging read status could not be saved to your profile."
-      : "Could not update message read status.");
-  });
 }
 
 async function handleSend(event) {
@@ -210,6 +218,7 @@ async function handleSend(event) {
               <p className="direct-messages__empty">No people found.</p>
             ) : visibleProfiles.map((profile) => {
               const conversation = conversationsById.get(getConversationId(uid, profile.id));
+              const unreadCount = unreadCounts[getConversationId(uid, profile.id)] || 0;
               return (
                 <button
                   type="button"
@@ -220,6 +229,14 @@ async function handleSend(event) {
                 >
                   <span className="direct-messages__contact-name">
                     {profile.displayName || "User"}
+                    {unreadCount > 0 && (
+                      <span
+                        className="direct-messages__unread"
+                        aria-label={`${unreadCount} unread message${unreadCount === 1 ? "" : "s"}`}
+                      >
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
+                    )}
                   </span>
                   <span className="direct-messages__contact-meta">
                     {roleLabel(profile.role)}
