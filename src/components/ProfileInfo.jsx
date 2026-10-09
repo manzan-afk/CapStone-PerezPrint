@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { saveUserName } from "../services/userServices";
+import { saveUserName, saveUserPhoto } from "../services/userServices";
+import { uploadProfilePhoto } from "../services/profilePhotoService";
 import "./ProfileInfo.css";
 
 function formatDate(value) {
@@ -27,6 +28,28 @@ export default function ProfileInfo({ user, profile }) {
   const [lastName, setLastName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const photoInputRef = useRef(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+  const photoURL = profile?.photoURL || user?.photoURL;
+
+  async function handlePhotoChange(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setPhotoError("");
+    setUploadingPhoto(true);
+    try {
+      await saveUserPhoto(user.uid, await uploadProfilePhoto(user.uid, file));
+      await refreshProfile();
+      setImageFailed(false);
+    } catch (err) {
+      setPhotoError(err.message || "Failed to upload your photo. Please try again.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
 
   function startEditing() {
     setFirstName(profile?.firstName || "");
@@ -67,8 +90,8 @@ export default function ProfileInfo({ user, profile }) {
       <section className="profile-card">
         <div className="profile-card__hero">
           <div className="profile-card__avatar">
-            {user?.photoURL && !imageFailed ? (
-              <img src={user.photoURL} alt="Profile photo" onError={() => setImageFailed(true)} />
+            {photoURL && !imageFailed ? (
+              <img src={photoURL} alt="Profile photo" onError={() => setImageFailed(true)} />
             ) : (
               <svg viewBox="0 0 24 24" width="38" height="38" aria-hidden="true">
                 <path
@@ -81,6 +104,22 @@ export default function ProfileInfo({ user, profile }) {
           <div className="profile-card__identity">
             <h3>{fullName || "Name not set"}</h3>
             {email && <p>{email}</p>}
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handlePhotoChange}
+              hidden
+            />
+            <button
+              type="button"
+              className="profile-card__edit-btn profile-card__photo-btn"
+              disabled={uploadingPhoto}
+              onClick={() => photoInputRef.current?.click()}
+            >
+              {uploadingPhoto ? "Uploading..." : photoURL ? "Change photo" : "Upload photo"}
+            </button>
+            {photoError && <div className="profile-card__error" role="alert">{photoError}</div>}
           </div>
           {role && <span className="profile-card__role">{role}</span>}
         </div>

@@ -68,6 +68,16 @@ export function saveUserName(uid, firstName, lastName) {
 }
 
 /**
+ * Saves the URL of a user's profile photo on their profile document.
+ * @param {string} uid - Firebase Auth UID
+ * @param {string} photoURL
+ * @returns {Promise<void>}
+ */
+export function saveUserPhoto(uid, photoURL) {
+  return setDoc(doc(db, "users", uid), { photoURL }, { merge: true });
+}
+
+/**
  * Fetches every user profile document — for admin user management.
  * @returns {Promise<Array<object>>} array of profiles, each including its `id` (UID)
  */

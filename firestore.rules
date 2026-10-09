@@ -1,0 +1,100 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================
+    // HELPER FUNCTIONS
+    // =========================
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function roleOf(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid))
+        ? get(/databases/$(database)/documents/users/$(uid)).data.get("role", "customer")
+        : "customer";
+    }
+
+    function userRole() {
+      return roleOf(request.auth.uid);
+    }
+
+    function isAdminOrStaff() {
+      return signedIn() &&
+        userRole() in ["admin", "staff"];
+    }
+
+    // =========================
+    // USERS
+    // =========================
+    match /users/{userId} {
+      allow read: if signedIn();
+
+      allow write: if signedIn() &&
+        (
+          request.auth.uid == userId ||
+          isAdminOrStaff() && userRole() == "admin"
+        );
+    }
+
+    // =========================
+    // SERVICES
+    // =========================
+    match /services/{serviceId} {
+      allow read: if signedIn();
+
+      allow write: if signedIn() &&
+        userRole() == "admin";
+    }
+
+    // =========================
+    // ORDERS
+    // =========================
+    match /orders/{orderId} {
+      allow read: if signedIn() &&
+        (
+          resource.data.customerId == request.auth.uid ||
+          isAdminOrStaff()
+        );
+
+      allow create: if signedIn() &&
+        request.resource.data.customerId == request.auth.uid;
+
+      allow update: if isAdminOrStaff();
+    }
+
+    // =========================
+    // MESSAGING
+    // Each document is a single direct message, queried by
+    // participants / conversationId / recipientId (see messagingService.jsx).
+    // =========================
+    match /messages/{messageId} {
+      allow read: if signedIn() &&
+        (
+          request.auth.uid in resource.data.participants ||
+          resource.data.recipientId == request.auth.uid ||
+          isAdminOrStaff()
+        );
+
+      allow create: if signedIn() &&
+        request.resource.data.senderId == request.auth.uid &&
+        request.resource.data.participants is list &&
+        request.resource.data.participants.size() == 2 &&
+        request.resource.data.participants[0] !=
+          request.resource.data.participants[1] &&
+        request.auth.uid in request.resource.data.participants &&
+        request.resource.data.recipientId in request.resource.data.participants &&
+        request.resource.data.recipientId != request.auth.uid &&
+        (
+          userRole() != "customer" ||
+          roleOf(request.resource.data.recipientId) != "customer"
+        );
+
+      allow update: if isAdminOrStaff();
+
+      allow delete: if signedIn() &&
+        userRole() == "admin";
+    }
+  }
+}

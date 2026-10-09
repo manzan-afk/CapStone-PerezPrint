@@ -121,6 +121,15 @@
   cursor: pointer;
 }
 
+.profile-card__photo-btn {
+  margin-top: 8px;
+}
+
+.profile-card__edit-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .profile-card__edit-btn:hover,
 .profile-card__cancel-btn:hover:not(:disabled) {
   border-color: #ff8a1e;

@@ -216,9 +216,9 @@ export default function AdminDashboard() {
             aria-label="Open personal information"
           >
             <div className="user-avatar">
-              {user?.photoURL && !profileImageFailed ? (
+              {(profile?.photoURL || user?.photoURL) && !profileImageFailed ? (
                 <img
-                  src={user.photoURL}
+                  src={profile?.photoURL || user.photoURL}
                   alt="Profile photo"
                   className="user-avatar-img"
                   onError={() => setProfileImageFailed(true)}
