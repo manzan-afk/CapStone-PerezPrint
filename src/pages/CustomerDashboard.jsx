@@ -16,7 +16,13 @@ import {
 } from "../services/ordersService";
 import ProfileInfo from "../components/ProfileInfo";
 import "./CustomerDashboard.css";
-import { lineOptionsSuffix, getServiceUnits, formatPerUnit } from "../utils/orderLines";
+import {
+  lineOptionsSuffix,
+  getServiceUnits,
+  formatPerUnit,
+  optionTypePrice,
+  formatTypeLabel,
+} from "../utils/orderLines";
 
 export default function CustomerDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -819,24 +825,6 @@ function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
           ) : (
             <div className="svc-browse-grid">
               {filteredServices.map((svc) => {
-            const varietyPrices = (svc.varieties || [])
-              .map((v) => v.price)
-              .filter((p) => p != null);
-            const minPrice = varietyPrices.length ? Math.min(...varietyPrices) : null;
-            const maxPrice = varietyPrices.length ? Math.max(...varietyPrices) : null;
-
-            let priceDisplay;
-            if (minPrice != null) {
-              priceDisplay =
-                minPrice === maxPrice
-                  ? `₱${minPrice.toFixed(2)}`
-                  : `From ₱${minPrice.toFixed(2)}`;
-            } else if (svc.price != null) {
-              priceDisplay = `₱${Number(svc.price).toFixed(2)}`;
-            } else {
-              priceDisplay = "";
-            }
-
             return (
               <button
                 key={svc.id}
@@ -875,9 +863,8 @@ function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
                     )}
                   </div>
                 )}
-                {(priceDisplay || getServiceUnits(svc).length > 0) && (
+                {getServiceUnits(svc).length > 0 && (
                   <div className="svc-card__footer">
-                    {priceDisplay && <span className="svc-card__price">{priceDisplay}</span>}
                     {getServiceUnits(svc).length > 0 && (
                       <span className="svc-card__unit">
                         {getServiceUnits(svc).map(formatPerUnit).join(" / ")}
@@ -944,14 +931,20 @@ function blockLines(block) {
 
   return Object.entries(checkedVarieties).map(([idx, qty]) => {
     const variety = service.varieties[Number(idx)];
-    const unitPrice = variety.price != null ? Number(variety.price) : null;
+    const options = (variety.serviceOptions || [])
+      .filter((option) => variantOptions[idx]?.[option.name])
+      .map((option) => {
+        const type = variantOptions[idx][option.name];
+        const price = optionTypePrice(option, type);
+        return price ? { name: option.name, type, price } : { name: option.name, type };
+      });
+    const optionsExtra = options.reduce((sum, option) => sum + (option.price || 0), 0);
+    const unitPrice = variety.price != null ? Number(variety.price) + optionsExtra : null;
     return {
       serviceId: service.id,
       serviceName: service.name,
       varietyName: variety.name,
-      options: (variety.serviceOptions || [])
-        .filter((option) => variantOptions[idx]?.[option.name])
-        .map((option) => ({ name: option.name, type: variantOptions[idx][option.name] })),
+      options,
       unit: selectedUnit,
       quantity: Number(qty) || 0,
       unitPrice,
@@ -1202,7 +1195,7 @@ function OrderCartModal({ initialService, uid, email, customerName, onClose, onS
                               >
                                 <option value="">Select {option.name}</option>
                                 {option.types.map((type) => (
-                                  <option key={type} value={type}>{type}</option>
+                                  <option key={type} value={type}>{formatTypeLabel(option, type)}</option>
                                 ))}
                               </select>
                             </div>

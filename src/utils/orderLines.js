@@ -15,3 +15,14 @@ export function lineOptionsSuffix(line) {
   if (line.unit) parts.push(formatPerUnit(line.unit));
   return parts.length ? ` [${parts.join(", ")}]` : "";
 }
+
+// Extra per-unit charge an admin attached to one type of a service option (0 if none).
+export function optionTypePrice(option, type) {
+  const price = Number(option?.typePrices?.[type]);
+  return Number.isFinite(price) && price > 0 ? price : 0;
+}
+
+export function formatTypeLabel(option, type) {
+  const price = optionTypePrice(option, type);
+  return price ? `${type} (+\u20b1${price.toFixed(2)})` : type;
+}

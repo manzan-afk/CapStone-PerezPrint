@@ -25,7 +25,7 @@ import ProfileInfo from "../components/ProfileInfo";
 import PickupOrders from "../components/PickupOrders";
 import OrderDetails from "../components/OrderDetails";
 import "./AdminDashboard.css";
-import { lineOptionsSuffix, getServiceUnits, formatPerUnit } from "../utils/orderLines";
+import { lineOptionsSuffix, getServiceUnits, formatPerUnit, formatTypeLabel } from "../utils/orderLines";
 
 const ROLES = ["customer", "staff", "admin"];
 
@@ -1439,7 +1439,9 @@ function ServicesManagement() {
                                       <dt>{option.name}</dt>
                                       <dd>
                                         {option.types.map((type) => (
-                                          <span key={type} className="svc-variety-tag">{type}</span>
+                                          <span key={type} className="svc-variety-tag">
+                                            {formatTypeLabel(option, type)}
+                                          </span>
                                         ))}
                                       </dd>
                                     </div>
@@ -1472,14 +1474,35 @@ function ServicesManagement() {
   );
 }
 
-function OptionTypesEditor({ option, onTypesChange, onRemove }) {
+function OptionTypesEditor({ option, onChange, onRemove }) {
   const [typeInput, setTypeInput] = useState("");
+  const [priceInput, setPriceInput] = useState("");
+  const [priceError, setPriceError] = useState("");
 
   function addType() {
     const trimmed = typeInput.trim();
+    if (!trimmed || option.types.some((type) => type.toLowerCase() === trimmed.toLowerCase())) {
+      setTypeInput("");
+      return;
+    }
+    const price = priceInput.trim() === "" ? 0 : Number(priceInput);
+    if (!Number.isFinite(price) || price < 0) {
+      setPriceError("Type price must be a number of 0 or more.");
+      return;
+    }
+    setPriceError("");
     setTypeInput("");
-    if (!trimmed || option.types.some((type) => type.toLowerCase() === trimmed.toLowerCase())) return;
-    onTypesChange([...option.types, trimmed]);
+    setPriceInput("");
+    onChange({
+      types: [...option.types, trimmed],
+      typePrices: price > 0 ? { ...option.typePrices, [trimmed]: price } : option.typePrices,
+    });
+  }
+
+  function removeType(type) {
+    const typePrices = { ...option.typePrices };
+    delete typePrices[type];
+    onChange({ types: option.types.filter((item) => item !== type), typePrices });
   }
 
   return (
@@ -1504,19 +1527,36 @@ function OptionTypesEditor({ option, onTypesChange, onRemove }) {
             }
           }}
         />
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          className="order-select svc-variety-price-input"
+          placeholder="+ Price"
+          aria-label={`Extra price for the new ${option.name} type`}
+          value={priceInput}
+          onChange={(e) => setPriceInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addType();
+            }
+          }}
+        />
         <button type="button" className="svc-variety-add-btn" onClick={addType}>
           Add type
         </button>
       </div>
+      {priceError && <div className="field-error">{priceError}</div>}
       {option.types.length > 0 && (
         <div className="svc-variety-tags svc-variety-tags--editable">
           {option.types.map((type) => (
             <span key={type} className="svc-variety-tag">
-              {type}
+              {formatTypeLabel(option, type)}
               <button
                 type="button"
                 className="svc-variety-remove"
-                onClick={() => onTypesChange(option.types.filter((item) => item !== type))}
+                onClick={() => removeType(type)}
                 aria-label={`Remove ${type}`}
               >
                 ✕
@@ -1564,8 +1604,8 @@ function ServiceOptionsField({ options, onChange }) {
         <OptionTypesEditor
           key={option.name}
           option={option}
-          onTypesChange={(types) =>
-            onChange(options.map((item, i) => (i === index ? { ...item, types } : item)))
+          onChange={(patch) =>
+            onChange(options.map((item, i) => (i === index ? { ...item, ...patch } : item)))
           }
           onRemove={() => onChange(options.filter((_, i) => i !== index))}
         />
