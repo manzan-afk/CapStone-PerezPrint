@@ -523,9 +523,22 @@ function OrderNotifications({ uid }) {
 
 function CustomerOverview({ uid, displayName, customerName, onGoToServices, onGoToOrders, onGoToSchedule }) {
   const [orders, setOrders] = useState([]);
+  const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
+
+  useEffect(() => {
+    async function loadServices() {
+      try {
+        const allServices = await getAllServices();
+        setServices(allServices);
+      } catch (err) {
+        console.error("Failed to load services:", err);
+      }
+    }
+    loadServices();
+  }, []);
 
   useEffect(() => {
     if (uid) loadOrders();
@@ -677,6 +690,7 @@ function CustomerOverview({ uid, displayName, customerName, onGoToServices, onGo
                 : lines[0]
                 ? `${lines[0].serviceName}${lines[0].varietyName ? ` (${lines[0].varietyName})` : ""}`
                 : "Order";
+            const firstServiceImage = lines.length > 0 ? getServiceImage(lines[0].serviceId, services) : null;
 
             return (
               <div
@@ -689,6 +703,14 @@ function CustomerOverview({ uid, displayName, customerName, onGoToServices, onGo
                   if (e.key === "Enter" || e.key === " ") setSelectedOrder(order);
                 }}
               >
+                {firstServiceImage && (
+                  <img
+                    className="order-card__image"
+                    src={firstServiceImage}
+                    alt={lines[0]?.serviceName || "Service"}
+                    loading="lazy"
+                  />
+                )}
                 <div className="order-card__top">
                   <span className="order-card__service">{summary}</span>
                   <span className={`order-status order-status--${order.status || "placed"}`}>
