@@ -961,7 +961,8 @@ function blockLines(block) {
         return price ? { name: option.name, type, price } : { name: option.name, type };
       });
     const optionsExtra = options.reduce((sum, option) => sum + (option.price || 0), 0);
-    const unitPrice = variety.price != null ? Number(variety.price) + optionsExtra : null;
+    const hasPrice = variety.price != null || optionsExtra > 0;
+    const unitPrice = hasPrice ? (Number(variety.price) || 0) + optionsExtra : null;
     return {
       serviceId: service.id,
       serviceName: service.name,
@@ -987,6 +988,8 @@ function OrderCartModal({ initialService, uid, email, customerName, onClose, onS
   const [placedOrder, setPlacedOrder] = useState(null);
 
   const allLines = blocks.flatMap(blockLines).filter((l) => l.quantity > 0);
+  const pricedLines = allLines.filter((l) => l.lineTotal != null);
+  const pricedTotal = pricedLines.reduce((sum, l) => sum + l.lineTotal, 0);
   const grandTotal = allLines.some((l) => l.lineTotal == null)
     ? null
     : allLines.reduce((sum, l) => sum + (l.lineTotal || 0), 0);
@@ -1244,10 +1247,26 @@ function OrderCartModal({ initialService, uid, email, customerName, onClose, onS
 
           <div className="field-error">{itemsError}</div>
 
-          {grandTotal != null && allLines.length > 0 && (
-            <div className="order-modal__total">
-              <span>Total ({allLines.length} item{allLines.length > 1 ? "s" : ""})</span>
-              <span className="order-modal__total-amount">₱{grandTotal.toFixed(2)}</span>
+          {allLines.length > 0 && (
+            <div className="order-modal__summary">
+              <ul className="order-modal__breakdown">
+                {allLines.map((line, index) => (
+                  <li key={index}>
+                    <span>
+                      {line.serviceName}
+                      {line.varietyName ? ` (${line.varietyName})` : ""}
+                      {lineOptionsSuffix(line)} x{line.quantity}
+                    </span>
+                    <span>{line.lineTotal != null ? `₱${line.lineTotal.toFixed(2)}` : "No price"}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="order-modal__total">
+                <span>
+                  Total ({pricedLines.length} priced item{pricedLines.length === 1 ? "" : "s"})
+                </span>
+                <span className="order-modal__total-amount">₱{pricedTotal.toFixed(2)}</span>
+              </div>
             </div>
           )}
 

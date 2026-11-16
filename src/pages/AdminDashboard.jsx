@@ -582,6 +582,8 @@ function DashboardOverview({ onNavigate }) {
 
 function SalesManagement() {
   const [orders, setOrders] = useState([]);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [users, setUsers] = useState([]);
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -637,6 +639,21 @@ function SalesManagement() {
     order,
     created: order.createdAt?.toDate ? order.createdAt.toDate() : null,
   })).sort((a, b) => (b.created?.getTime() || 0) - (a.created?.getTime() || 0));
+
+  const rangeStart = startDate ? new Date(`${startDate}T00:00:00`) : null;
+  const rangeEnd = endDate ? new Date(`${endDate}T23:59:59.999`) : null;
+  const dateRangeActive = Boolean(rangeStart || rangeEnd);
+  const visibleTransactions = dateRangeActive
+    ? allTransactions.filter(({ created }) => {
+        if (!created) return false;
+        if (rangeStart && created < rangeStart) return false;
+        if (rangeEnd && created > rangeEnd) return false;
+        return true;
+      })
+    : allTransactions;
+  const visibleTotal = visibleTransactions
+    .filter(({ order }) => order.status !== "cancelled")
+    .reduce((sum, { order }) => sum + (Number(order.totalPrice) || 0), 0);
 
   return (
     <div className="dashboard-content report-print-root">
@@ -715,10 +732,53 @@ function SalesManagement() {
           <h3 className="dashboard-section__title">
             Date to Date
           </h3>
+          <div className="report-date-range">
+            <label className="report-date-range__field">
+              <span>From</span>
+              <input
+                type="date"
+                className="report-date-input"
+                value={startDate}
+                max={endDate || undefined}
+                onChange={(event) => setStartDate(event.target.value)}
+              />
+            </label>
+            <label className="report-date-range__field">
+              <span>To</span>
+              <input
+                type="date"
+                className="report-date-input"
+                value={endDate}
+                min={startDate || undefined}
+                onChange={(event) => setEndDate(event.target.value)}
+              />
+            </label>
+            {dateRangeActive && (
+              <button
+                type="button"
+                className="report-clear-btn"
+                onClick={() => {
+                  setStartDate("");
+                  setEndDate("");
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </div>
+
+        {orders.length > 0 && (
+          <p className="report-range-summary">
+            {visibleTransactions.length} transaction{visibleTransactions.length === 1 ? "" : "s"}
+            {" · "}Total ₱{visibleTotal.toFixed(2)} (excludes cancelled)
+          </p>
+        )}
 
         {orders.length === 0 ? (
           <div className="um-empty">No transactions yet.</div>
+        ) : visibleTransactions.length === 0 ? (
+          <div className="um-empty">No transactions in the selected date range.</div>
         ) : (
           <div className="um-table-wrap report-table-wrap">
             <table className="um-table">
@@ -733,7 +793,7 @@ function SalesManagement() {
                 </tr>
               </thead>
               <tbody>
-                {allTransactions.map(({ order, created }) => (
+                {visibleTransactions.map(({ order, created }) => (
                   <tr key={order.id}>
                     <td className="um-muted">
                       {created
@@ -1370,10 +1430,102 @@ function ServicesManagement() {
   );
 }
 
-function OptionTypesEditor({ option, onChange, onRemove }) {
+function OptionTypeRow({ option, type, onRename, onPrice, onRemove }) {
+  const [name, setName] = useState(type);
+  const [price, setPrice] = useState(option.typePrices?.[type] ?? "");
+  const [error, setError] = useState("");
+
+  function commitName() {
+    const trimmed = name.trim();
+    if (trimmed === type) {
+      setName(type);
+      return;
+    }
+    const duplicate = option.types.some(
+      (item) => item !== type && item.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (!trimmed || duplicate) {
+      setError(!trimmed ? "Type name can't be empty." : "That type already exists.");
+      setName(type);
+      return;
+    }
+    setError("");
+    onRename(type, trimmed);
+  }
+
+  function handlePrice(value) {
+    setPrice(value);
+    const number = Number(value);
+    if (value === "" || (Number.isFinite(number) && number >= 0)) {
+      setError("");
+      onPrice(type, value === "" ? 0 : number);
+    } else {
+      setError("Type price must be a number of 0 or more.");
+    }
+  }
+
+  return (
+    <div className="svc-type-row">
+      <div className="svc-type-row__fields">
+        <input
+          type="text"
+          className="order-select"
+          aria-label={`Name of ${option.name} type ${type}`}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={commitName}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitName();
+            }
+          }}
+        />
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          className="order-select svc-variety-price-input"
+          placeholder="+ Price"
+          aria-label={`Extra price for ${type}`}
+          value={price}
+          onChange={(e) => handlePrice(e.target.value)}
+        />
+        <button
+          type="button"
+          className="svc-variety-remove"
+          onClick={() => onRemove(type)}
+          aria-label={`Remove ${type}`}
+        >
+          ✕
+        </button>
+      </div>
+      {error && <div className="field-error">{error}</div>}
+    </div>
+  );
+}
+
+function OptionTypesEditor({ option, siblingNames = [], onChange, onRemove }) {
   const [typeInput, setTypeInput] = useState("");
   const [priceInput, setPriceInput] = useState("");
   const [priceError, setPriceError] = useState("");
+  const [optionName, setOptionName] = useState(option.name);
+  const [nameError, setNameError] = useState("");
+
+  function commitOptionName() {
+    const trimmed = optionName.trim();
+    if (trimmed === option.name) {
+      setOptionName(option.name);
+      return;
+    }
+    if (!trimmed || siblingNames.some((name) => name.toLowerCase() === trimmed.toLowerCase())) {
+      setNameError(!trimmed ? "Option name can't be empty." : "That option already exists.");
+      setOptionName(option.name);
+      return;
+    }
+    setNameError("");
+    onChange({ name: trimmed });
+  }
 
   function addType() {
     const trimmed = typeInput.trim();
@@ -1401,14 +1553,44 @@ function OptionTypesEditor({ option, onChange, onRemove }) {
     onChange({ types: option.types.filter((item) => item !== type), typePrices });
   }
 
+  function renameType(oldType, newType) {
+    const typePrices = { ...option.typePrices };
+    if (oldType in typePrices) {
+      typePrices[newType] = typePrices[oldType];
+      delete typePrices[oldType];
+    }
+    onChange({ types: option.types.map((item) => (item === oldType ? newType : item)), typePrices });
+  }
+
+  function setTypePrice(type, price) {
+    const typePrices = { ...option.typePrices };
+    if (price > 0) typePrices[type] = price;
+    else delete typePrices[type];
+    onChange({ typePrices });
+  }
+
   return (
     <div className="svc-option-group">
       <div className="svc-option-group__header">
-        <strong>{option.name}</strong>
+        <input
+          type="text"
+          className="order-select svc-option-group__name"
+          aria-label="Option name"
+          value={optionName}
+          onChange={(e) => setOptionName(e.target.value)}
+          onBlur={commitOptionName}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitOptionName();
+            }
+          }}
+        />
         <button type="button" className="svc-option-group__remove" onClick={onRemove}>
           Remove option
         </button>
       </div>
+      {nameError && <div className="field-error">{nameError}</div>}
       <div className="svc-variety-input-row">
         <input
           type="text"
@@ -1445,19 +1627,16 @@ function OptionTypesEditor({ option, onChange, onRemove }) {
       </div>
       {priceError && <div className="field-error">{priceError}</div>}
       {option.types.length > 0 && (
-        <div className="svc-variety-tags svc-variety-tags--editable">
+        <div className="svc-type-list">
           {option.types.map((type) => (
-            <span key={type} className="svc-variety-tag">
-              {formatTypeLabel(option, type)}
-              <button
-                type="button"
-                className="svc-variety-remove"
-                onClick={() => removeType(type)}
-                aria-label={`Remove ${type}`}
-              >
-                ✕
-              </button>
-            </span>
+            <OptionTypeRow
+              key={type}
+              option={option}
+              type={type}
+              onRename={renameType}
+              onPrice={setTypePrice}
+              onRemove={removeType}
+            />
           ))}
         </div>
       )}
@@ -1500,6 +1679,7 @@ function ServiceOptionsField({ options, onChange }) {
         <OptionTypesEditor
           key={option.name}
           option={option}
+          siblingNames={options.filter((_, i) => i !== index).map((item) => item.name)}
           onChange={(patch) =>
             onChange(options.map((item, i) => (i === index ? { ...item, ...patch } : item)))
           }

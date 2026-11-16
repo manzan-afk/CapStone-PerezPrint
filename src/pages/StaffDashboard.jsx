@@ -952,6 +952,8 @@ function getOverviewOrderLines(order) {
 
 function SalesManagement() {
   const [orders, setOrders] = useState([]);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [users, setUsers] = useState([]);
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1007,6 +1009,21 @@ function SalesManagement() {
     order,
     created: order.createdAt?.toDate ? order.createdAt.toDate() : null,
   })).sort((a, b) => (b.created?.getTime() || 0) - (a.created?.getTime() || 0));
+
+  const rangeStart = startDate ? new Date(`${startDate}T00:00:00`) : null;
+  const rangeEnd = endDate ? new Date(`${endDate}T23:59:59.999`) : null;
+  const dateRangeActive = Boolean(rangeStart || rangeEnd);
+  const visibleTransactions = dateRangeActive
+    ? allTransactions.filter(({ created }) => {
+        if (!created) return false;
+        if (rangeStart && created < rangeStart) return false;
+        if (rangeEnd && created > rangeEnd) return false;
+        return true;
+      })
+    : allTransactions;
+  const visibleTotal = visibleTransactions
+    .filter(({ order }) => order.status !== "cancelled")
+    .reduce((sum, { order }) => sum + (Number(order.totalPrice) || 0), 0);
 
   return (
     <div className="dashboard-content report-print-root">
@@ -1085,10 +1102,53 @@ function SalesManagement() {
           <h3 className="dashboard-section__title">
             Date to Date
           </h3>
+          <div className="report-date-range">
+            <label className="report-date-range__field">
+              <span>From</span>
+              <input
+                type="date"
+                className="report-date-input"
+                value={startDate}
+                max={endDate || undefined}
+                onChange={(event) => setStartDate(event.target.value)}
+              />
+            </label>
+            <label className="report-date-range__field">
+              <span>To</span>
+              <input
+                type="date"
+                className="report-date-input"
+                value={endDate}
+                min={startDate || undefined}
+                onChange={(event) => setEndDate(event.target.value)}
+              />
+            </label>
+            {dateRangeActive && (
+              <button
+                type="button"
+                className="report-clear-btn"
+                onClick={() => {
+                  setStartDate("");
+                  setEndDate("");
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </div>
+
+        {orders.length > 0 && (
+          <p className="report-range-summary">
+            {visibleTransactions.length} transaction{visibleTransactions.length === 1 ? "" : "s"}
+            {" · "}Total ₱{visibleTotal.toFixed(2)} (excludes cancelled)
+          </p>
+        )}
 
         {orders.length === 0 ? (
           <div className="um-empty">No transactions yet.</div>
+        ) : visibleTransactions.length === 0 ? (
+          <div className="um-empty">No transactions in the selected date range.</div>
         ) : (
           <div className="um-table-wrap report-table-wrap">
             <table className="um-table">
@@ -1103,7 +1163,7 @@ function SalesManagement() {
                 </tr>
               </thead>
               <tbody>
-                {allTransactions.map(({ order, created }) => (
+                {visibleTransactions.map(({ order, created }) => (
                   <tr key={order.id}>
                     <td className="um-muted">
                       {created
