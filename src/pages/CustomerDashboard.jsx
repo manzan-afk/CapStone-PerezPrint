@@ -1312,6 +1312,11 @@ function getOrderLines(order) {
   return [];
 }
 
+function getServiceImage(serviceId, services) {
+  const service = services.find((s) => s.id === serviceId);
+  return service?.imageUrl || null;
+}
+
 function formatTimestamp(value) {
   const date = value?.toDate ? value.toDate() : value instanceof Date ? value : null;
   if (!date) return "—";
@@ -1404,11 +1409,24 @@ function Receipt({ order, customerName, onClose }) {
 
 function OrderHistory({ uid, customerName }) {
   const [orders, setOrders] = useState([]);
+  const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
+
+  useEffect(() => {
+    async function loadServices() {
+      try {
+        const allServices = await getAllServices();
+        setServices(allServices);
+      } catch (err) {
+        console.error("Failed to load services:", err);
+      }
+    }
+    loadServices();
+  }, []);
 
   useEffect(() => {
     if (uid) loadOrders();
@@ -1528,6 +1546,7 @@ function OrderHistory({ uid, customerName }) {
                 : lines[0]
                 ? `${lines[0].serviceName}${lines[0].varietyName ? ` (${lines[0].varietyName})` : ""}`
                 : "Order";
+            const firstServiceImage = lines.length > 0 ? getServiceImage(lines[0].serviceId, services) : null;
 
             return (
               <div
@@ -1540,6 +1559,14 @@ function OrderHistory({ uid, customerName }) {
                   if (e.key === "Enter" || e.key === " ") setSelectedOrder(order);
                 }}
               >
+                {firstServiceImage && (
+                  <img
+                    className="order-card__image"
+                    src={firstServiceImage}
+                    alt={lines[0]?.serviceName || "Service"}
+                    loading="lazy"
+                  />
+                )}
                 <div className="order-card__top">
                   <span className="order-card__service">{summary}</span>
                   <span className={`order-status order-status--${order.status || "placed"}`}>

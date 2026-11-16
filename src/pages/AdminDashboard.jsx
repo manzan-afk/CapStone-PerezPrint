@@ -169,10 +169,10 @@ export default function AdminDashboard() {
 
           <a
             href="#"
-            className={`nav-item ${view === "reports" ? "nav-item--active" : ""}`}
+            className={`nav-item ${view === "sales" ? "nav-item--active" : ""}`}
             onClick={(e) => {
               e.preventDefault();
-              setView("reports");
+              setView("sales");
               setSidebarOpen(false);
             }}
           >
@@ -182,7 +182,7 @@ export default function AdminDashboard() {
                 d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm0 2v14h14V5H5Zm2 10h2v2H7v-2Zm4-4h2v6h-2v-6Zm4-3h2v9h-2V8Z"
               />
             </svg>
-            Reports
+            Sales
           </a>
 
           <a
@@ -275,8 +275,8 @@ export default function AdminDashboard() {
               ? "Orders"
               : view === "pickup"
               ? "Pickups"
-              : view === "reports"
-              ? "Reports"
+              : view === "sales"
+              ? "Sales"
               : view === "profile"
               ? "Personal Information"
               : "Messages"}
@@ -299,7 +299,7 @@ export default function AdminDashboard() {
           />
         )}
 
-        {view === "reports" && <ReportsManagement />}
+        {view === "sales" && <SalesManagement />}
 
         {view === "pickup" && <PickupOrders />}
 
@@ -475,8 +475,8 @@ function DashboardOverview({ onNavigate }) {
         <button
           type="button"
           className="stat-card stat-card--accent stat-card--interactive"
-          onClick={() => onNavigate("reports")}
-          aria-label="Open Reports"
+          onClick={() => onNavigate("sales")}
+          aria-label="Open Sales"
         >
           <div className="stat-card__icon stat-card__icon--revenue">
             <svg viewBox="0 0 24 24" width="18" height="18">
@@ -580,69 +580,12 @@ function DashboardOverview({ onNavigate }) {
   );
 }
 
-const REPORT_PERIODS = [
-  { value: "day", label: "Day" },
-  { value: "week", label: "Week" },
-  { value: "month", label: "Month" },
-];
-
-// Weeks start on Monday.
-function getPeriodStart(date, period) {
-  if (period === "month") return new Date(date.getFullYear(), date.getMonth(), 1);
-  const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  if (period === "week") dayStart.setDate(dayStart.getDate() - ((dayStart.getDay() + 6) % 7));
-  return dayStart;
-}
-
-function getPeriodLabel(start, period) {
-  if (period === "month") {
-    return start.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-  }
-  if (period === "week") {
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
-    const short = { month: "short", day: "numeric" };
-    return `${start.toLocaleDateString("en-US", short)} \u2013 ${end.toLocaleDateString("en-US", { ...short, year: "numeric" })}`;
-  }
-  return start.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function groupTransactions(orders, period) {
-  const groups = new Map();
-  orders.forEach((order) => {
-    const created = order.createdAt?.toDate ? order.createdAt.toDate() : null;
-    const start = created ? getPeriodStart(created, period) : null;
-    const key = start ? start.getTime() : "none";
-    if (!groups.has(key)) {
-      groups.set(key, {
-        key,
-        label: start ? getPeriodLabel(start, period) : "No date",
-        sortValue: start ? start.getTime() : -Infinity,
-        orders: [],
-        total: 0,
-      });
-    }
-    const group = groups.get(key);
-    group.orders.push({ order, created });
-    group.total += order.status === "cancelled" ? 0 : Number(order.totalPrice) || 0;
-  });
-  return [...groups.values()]
-    .sort((a, b) => b.sortValue - a.sortValue)
-    .map((group) => ({
-      ...group,
-      orders: group.orders.sort(
-        (a, b) => (b.created?.getTime() || 0) - (a.created?.getTime() || 0)
-      ),
-    }));
-}
-
-function ReportsManagement() {
+function SalesManagement() {
   const [orders, setOrders] = useState([]);
   const [users, setUsers] = useState([]);
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [period, setPeriod] = useState("day");
 
   useEffect(() => {
     async function loadReports() {
@@ -656,7 +599,7 @@ function ReportsManagement() {
         setUsers(allUsers);
         setServices(allServices);
       } catch (err) {
-        setError("Failed to load reports. Please try again.");
+        setError("Failed to load sales data. Please try again.");
       } finally {
         setLoading(false);
       }
@@ -666,7 +609,7 @@ function ReportsManagement() {
   }, []);
 
   if (loading) {
-    return <div className="dashboard-content">Loading reports...</div>;
+    return <div className="dashboard-content">Loading sales data...</div>;
   }
 
   const completedOrders = orders.filter((order) => order.status === "completed");
@@ -689,7 +632,11 @@ function ReportsManagement() {
       return { ...service, orderCount: matchingOrders.length, revenue: serviceRevenue };
     })
     .sort((a, b) => b.orderCount - a.orderCount || b.revenue - a.revenue);
-  const transactionGroups = groupTransactions(orders, period);
+  
+  const allTransactions = orders.map((order) => ({
+    order,
+    created: order.createdAt?.toDate ? order.createdAt.toDate() : null,
+  })).sort((a, b) => (b.created?.getTime() || 0) - (a.created?.getTime() || 0));
 
   return (
     <div className="dashboard-content report-print-root">
@@ -766,51 +713,10 @@ function ReportsManagement() {
       <section className="report-panel report-transactions">
         <div className="report-transactions__header">
           <h3 className="dashboard-section__title">
-            Transactions by {REPORT_PERIODS.find((item) => item.value === period).label}
+            Date to Date
           </h3>
-          <div className="report-period-toggle" role="group" aria-label="Group transactions by">
-            {REPORT_PERIODS.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                className={`report-period-btn ${period === item.value ? "report-period-btn--active" : ""}`}
-                aria-pressed={period === item.value}
-                onClick={() => setPeriod(item.value)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
         </div>
 
-        {orders.length === 0 ? (
-          <div className="um-empty">No transactions yet.</div>
-        ) : (
-          <div className="um-table-wrap report-table-wrap">
-            <table className="um-table">
-              <thead>
-                <tr>
-                  <th>{REPORT_PERIODS.find((item) => item.value === period).label}</th>
-                  <th>Transactions</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {transactionGroups.map((group) => (
-                  <tr key={group.key}>
-                    <td>{group.label}</td>
-                    <td className="um-muted">{group.orders.length}</td>
-                    <td className="um-muted">₱{group.total.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      <section className="report-panel report-transactions">
-        <h3 className="dashboard-section__title">All Transactions</h3>
         {orders.length === 0 ? (
           <div className="um-empty">No transactions yet.</div>
         ) : (
@@ -827,7 +733,7 @@ function ReportsManagement() {
                 </tr>
               </thead>
               <tbody>
-                {transactionGroups.flatMap((group) => group.orders).map(({ order, created }) => (
+                {allTransactions.map(({ order, created }) => (
                   <tr key={order.id}>
                     <td className="um-muted">
                       {created
@@ -839,20 +745,10 @@ function ReportsManagement() {
                         ? created.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
                         : "—"}
                     </td>
-                    <td className="um-muted">{order.customerEmail || "—"}</td>
-                    <td>
-                      {getOverviewOrderLines(order)
-                          .map((line) => `${line.serviceName}${line.varietyName ? ` (${line.varietyName})` : ""}${lineOptionsSuffix(line)} x${line.quantity || 1}`)
-                        .join(", ") || "—"}
-                    </td>
-                    <td>
-                      <span className={`order-status order-status--${order.status || "placed"}`}>
-                        {statusLabel(order.status || "placed")}
-                      </span>
-                    </td>
-                    <td className="um-muted">
-                      {order.totalPrice != null ? `₱${Number(order.totalPrice).toFixed(2)}` : "—"}
-                    </td>
+                    <td>{order.customerEmail || "Unknown"}</td>
+                    <td className="um-muted">{getOverviewOrderLines(order).length}</td>
+                    <td className="um-muted">{statusLabel(order.status)}</td>
+                    <td className="um-muted">₱{(Number(order.totalPrice) || 0).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { subscribeAllOrders, updateOrderStatus } from "../services/ordersService";
+import { getAllServices } from "../services/servicesService";
 import { lineOptionsSuffix } from "../utils/orderLines";
 import PrintableReceipt from "./PrintableReceipt";
 import "./PickupOrders.css";
@@ -19,6 +20,11 @@ function getLines(order) {
   return [];
 }
 
+function getServiceImage(serviceId, services) {
+  const service = services.find((s) => s.id === serviceId);
+  return service?.imageUrl || null;
+}
+
 function formatReadyTime(order) {
   const date = (order.pickupReadyAt || order.statusUpdatedAt)?.toDate?.();
   return date
@@ -34,11 +40,24 @@ function formatReadyTime(order) {
 
 export default function PickupOrders() {
   const [orders, setOrders] = useState([]);
+  const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [savingId, setSavingId] = useState(null);
   const [receiptOrder, setReceiptOrder] = useState(null);
+
+  useEffect(() => {
+    async function loadServices() {
+      try {
+        const allServices = await getAllServices();
+        setServices(allServices);
+      } catch (err) {
+        console.error("Failed to load services:", err);
+      }
+    }
+    loadServices();
+  }, []);
 
   useEffect(() => {
     return subscribeAllOrders(
@@ -134,18 +153,31 @@ export default function PickupOrders() {
               </dl>
 
               <ul className="pickup-card__items">
-                {getLines(order).map((line, index) => (
-                  <li key={index}>
-                    <span>
-                      {line.serviceName || "Service"}
-                      {line.varietyName ? ` (${line.varietyName})` : ""}
-                      {lineOptionsSuffix(line)} x{line.quantity || 1}
-                    </span>
-                    <span>
-                      {line.lineTotal != null ? `\u20b1${Number(line.lineTotal).toFixed(2)}` : "\u2014"}
-                    </span>
-                  </li>
-                ))}
+                {getLines(order).map((line, index) => {
+                  const imageUrl = getServiceImage(line.serviceId, services);
+                  return (
+                    <li key={index} className="pickup-card__item">
+                      {imageUrl && (
+                        <img
+                          className="pickup-card__item-image"
+                          src={imageUrl}
+                          alt={line.serviceName || "Service"}
+                          loading="lazy"
+                        />
+                      )}
+                      <div className="pickup-card__item-details">
+                        <span>
+                          {line.serviceName || "Service"}
+                          {line.varietyName ? ` (${line.varietyName})` : ""}
+                          {lineOptionsSuffix(line)} x{line.quantity || 1}
+                        </span>
+                        <span className="pickup-card__item-price">
+                          {line.lineTotal != null ? `\u20b1${Number(line.lineTotal).toFixed(2)}` : "\u2014"}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
 
               {order.description && <p className="pickup-card__note">{order.description}</p>}

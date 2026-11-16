@@ -1,7 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { getAllOrders, updateOrderStatus, requestOrderRevision } from "../services/ordersService";
+import { getAllOrders, updateOrderStatus, requestOrderRevision, getAllOrdersForReports } from "../services/ordersService";
+import {
+  getAllUsers,
+} from "../services/userServices";
+import {
+  getAllServices,
+} from "../services/servicesService";
 import {
   sendOrderRevisionMessage,
 } from "../services/messagingService";
@@ -98,6 +104,16 @@ export default function StaffDashboard() {
         <path
           fill="currentColor"
           d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2Zm6-6v-5a6 6 0 0 0-4-5.65V4a2 2 0 0 0-4 0v1.35A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2Z"
+        />
+      ),
+    },
+    {
+      key: "sales",
+      label: "Sales",
+      icon: (
+        <path
+          fill="currentColor"
+          d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm0 2v14h14V5H5Zm2 10h2v2H7v-2Zm4-4h2v6h-2v-6Zm4-3h2v9h-2V8Z"
         />
       ),
     },
@@ -262,7 +278,9 @@ export default function StaffDashboard() {
 
         {view === "pickup" && <PickupOrders />}
 
-        {view !== "dashboard" && view !== "orders" && view !== "messages" && view !== "profile" && view !== "pickup" && (
+        {view === "sales" && <SalesManagement />}
+
+        {view !== "dashboard" && view !== "orders" && view !== "messages" && view !== "profile" && view !== "pickup" && view !== "sales" && (
           <div className="dashboard-content dashboard-content--empty">
             Coming soon.
           </div>
@@ -912,6 +930,202 @@ function ReviewOrderModal({ order, saving, onClose, onAccept, onRequestRevision 
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function getOverviewOrderLines(order) {
+  if (order.items?.length > 0) return order.items;
+  if (order.serviceName) {
+    return [
+      {
+        serviceName: order.serviceName,
+        varietyName: order.varietyName || "",
+        quantity: order.quantity || 1,
+        unitPrice: order.unitPrice ?? null,
+        lineTotal: order.totalPrice ?? null,
+      },
+    ];
+  }
+  return [];
+}
+
+function SalesManagement() {
+  const [orders, setOrders] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [services, setServices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function loadSalesData() {
+      try {
+        const [allOrders, allUsers, allServices] = await Promise.all([
+          getAllOrdersForReports(),
+          getAllUsers(),
+          getAllServices(),
+        ]);
+        setOrders(allOrders);
+        setUsers(allUsers);
+        setServices(allServices);
+      } catch (err) {
+        setError("Failed to load sales data. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadSalesData();
+  }, []);
+
+  if (loading) {
+    return <div className="dashboard-content">Loading sales data...</div>;
+  }
+
+  const completedOrders = orders.filter((order) => order.status === "completed");
+  const billableOrders = orders.filter((order) => order.status !== "cancelled");
+  const revenue = billableOrders.reduce((sum, order) => sum + (Number(order.totalPrice) || 0), 0);
+  const completedRevenue = completedOrders.reduce(
+    (sum, order) => sum + (Number(order.totalPrice) || 0),
+    0
+  );
+  const customerCount = users.filter((user) => (user.role || "customer") === "customer").length;
+  const serviceRows = services
+    .map((service) => {
+      const matchingOrders = billableOrders.filter((order) =>
+        getOverviewOrderLines(order).some((line) => line.serviceName === service.name)
+      );
+      const serviceRevenue = matchingOrders.reduce(
+        (sum, order) => sum + (Number(order.totalPrice) || 0),
+        0
+      );
+      return { ...service, orderCount: matchingOrders.length, revenue: serviceRevenue };
+    })
+    .sort((a, b) => b.orderCount - a.orderCount || b.revenue - a.revenue);
+  
+  const allTransactions = orders.map((order) => ({
+    order,
+    created: order.createdAt?.toDate ? order.createdAt.toDate() : null,
+  })).sort((a, b) => (b.created?.getTime() || 0) - (a.created?.getTime() || 0));
+
+  return (
+    <div className="dashboard-content report-print-root">
+      {error && <div className="um-error">{error}</div>}
+
+      <div className="report-print-toolbar">
+        <div className="report-print-heading">
+          <h1>Perez Printing Shop</h1>
+          <p>Sales Report · Generated {new Date().toLocaleDateString()}</p>
+        </div>
+        <button className="report-print-button" onClick={() => window.print()}>
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M7 3h10v5H7V3Zm10 2H9v1h8V5ZM6 10h12a3 3 0 0 1 3 3v5h-4v3H7v-3H3v-5a3 3 0 0 1 3-3Zm10 9v-5H8v5h8Zm2-5h1v-1h-1v1ZM5 13v3h1v-2h12v2h1v-3a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1Z" />
+          </svg>
+          Print report
+        </button>
+      </div>
+
+      <div className="stat-grid report-stat-grid">
+        <div className="stat-card">
+          <span className="stat-card__label">Gross Revenue</span>
+          <span className="stat-card__value">₱{revenue.toFixed(2)}</span>
+          <span className="stat-card__sub">from {billableOrders.length} total orders</span>
+        </div>
+        <div className="stat-card stat-card--accent">
+          <span className="stat-card__label">Picked Up Revenue</span>
+          <span className="stat-card__value">₱{completedRevenue.toFixed(2)}</span>
+          <span className="stat-card__sub">from {completedOrders.length} picked up orders</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-card__label">Average Order Value</span>
+          <span className="stat-card__value">
+            ₱{billableOrders.length ? (revenue / billableOrders.length).toFixed(2) : "0.00"}
+          </span>
+          <span className="stat-card__sub">across all orders</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-card__label">Active Customers</span>
+          <span className="stat-card__value">{customerCount}</span>
+          <span className="stat-card__sub">registered customer accounts</span>
+        </div>
+      </div>
+
+      <div className="report-grid">
+        <section className="report-panel">
+          <h3 className="dashboard-section__title">Service Performance</h3>
+          {serviceRows.length === 0 ? (
+            <div className="um-empty">No services available.</div>
+          ) : (
+            <div className="um-table-wrap report-table-wrap">
+              <table className="um-table">
+                <thead>
+                  <tr>
+                    <th>Service</th>
+                    <th>Orders</th>
+                    <th>Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {serviceRows.map((service) => (
+                    <tr key={service.id}>
+                      <td>{service.name}</td>
+                      <td className="um-muted">{service.orderCount}</td>
+                      <td className="um-muted">₱{service.revenue.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
+
+      <section className="report-panel report-transactions">
+        <div className="report-transactions__header">
+          <h3 className="dashboard-section__title">
+            Date to Date
+          </h3>
+        </div>
+
+        {orders.length === 0 ? (
+          <div className="um-empty">No transactions yet.</div>
+        ) : (
+          <div className="um-table-wrap report-table-wrap">
+            <table className="um-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th>Customer</th>
+                  <th>Items</th>
+                  <th>Status</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allTransactions.map(({ order, created }) => (
+                  <tr key={order.id}>
+                    <td className="um-muted">
+                      {created
+                        ? created.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" })
+                        : "—"}
+                    </td>
+                    <td className="um-muted">
+                      {created
+                        ? created.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+                        : "—"}
+                    </td>
+                    <td>{order.customerEmail || "Unknown"}</td>
+                    <td className="um-muted">{getOverviewOrderLines(order).length}</td>
+                    <td className="um-muted">{statusLabel(order.status)}</td>
+                    <td className="um-muted">₱{(Number(order.totalPrice) || 0).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
