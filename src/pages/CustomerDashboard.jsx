@@ -982,6 +982,7 @@ function OrderCartModal({ initialService, uid, email, customerName, onClose, onS
   const [files, setFiles] = useState([]);
   const [descriptionError, setDescriptionError] = useState("");
   const [itemsError, setItemsError] = useState("");
+  const [filesError, setFilesError] = useState("");
   const [status, setStatus] = useState({ text: "", type: "" });
   const [submitting, setSubmitting] = useState(false);
   const [uploadNote, setUploadNote] = useState("");
@@ -1038,6 +1039,7 @@ function OrderCartModal({ initialService, uid, email, customerName, onClose, onS
   function handleFileChange(e) {
     const selected = Array.from(e.target.files || []);
     setFiles((prev) => [...prev, ...selected]);
+    if (selected.length > 0) setFilesError("");
     e.target.value = "";
   }
 
@@ -1055,6 +1057,7 @@ function OrderCartModal({ initialService, uid, email, customerName, onClose, onS
     e.preventDefault();
     setDescriptionError("");
     setItemsError("");
+    setFilesError("");
     setStatus({ text: "", type: "" });
 
     let valid = true;
@@ -1083,16 +1086,17 @@ function OrderCartModal({ initialService, uid, email, customerName, onClose, onS
       setDescriptionError("Please describe your order or add specifications.");
       valid = false;
     }
+    if (files.length === 0) {
+      setFilesError("Please attach at least one file to complete your order.");
+      valid = false;
+    }
     if (!valid) return;
 
     setSubmitting(true);
     setUploadNote("");
     try {
-      let uploadedFiles = [];
-      if (files.length > 0) {
-        setUploadNote(`Uploading ${files.length} file${files.length > 1 ? "s" : ""}...`);
-        uploadedFiles = await uploadOrderFiles(uid, files);
-      }
+      setUploadNote(`Uploading ${files.length} file${files.length > 1 ? "s" : ""}...`);
+      const uploadedFiles = await uploadOrderFiles(uid, files);
 
       const orderData = {
         customerId: uid,
@@ -1284,7 +1288,7 @@ function OrderCartModal({ initialService, uid, email, customerName, onClose, onS
           />
           <div className="field-error">{descriptionError}</div>
 
-          <label className="field-label">Attach Files</label>
+          <label className="field-label">Attach Files (required)</label>
           <label className="order-file-drop" htmlFor="cartFiles">
             <svg viewBox="0 0 24 24" width="22" height="22">
               <path
@@ -1320,6 +1324,7 @@ function OrderCartModal({ initialService, uid, email, customerName, onClose, onS
               ))}
             </ul>
           )}
+          <div className="field-error">{filesError}</div>
 
           <button type="submit" className="login-btn order-submit-btn" disabled={submitting}>
             {submitting ? uploadNote || "Submitting..." : "Submit Order"}

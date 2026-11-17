@@ -43,7 +43,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="dashboard-layout">
+    <div className="dashboard-layout dashboard-layout--pro">
       {/* Mobile top bar */}
       <div className="mobile-topbar">
         <button
@@ -264,23 +264,34 @@ export default function AdminDashboard() {
       {/* Main content */}
       <main className="dashboard-main">
         <header className="dashboard-header">
-          <h2>
-            {view === "dashboard"
-              ? "Dashboard"
-              : view === "users"
-              ? "User Management"
-              : view === "services"
-              ? "Services"
-              : view === "orders"
-              ? "Orders"
-              : view === "pickup"
-              ? "Pickups"
-              : view === "sales"
-              ? "Sales"
-              : view === "profile"
-              ? "Personal Information"
-              : "Messages"}
-          </h2>
+          <div className="dashboard-header__titles">
+            <span className="dashboard-header__eyebrow">Admin Console</span>
+            <h2>
+              {view === "dashboard"
+                ? "Dashboard"
+                : view === "users"
+                ? "User Management"
+                : view === "services"
+                ? "Services"
+                : view === "orders"
+                ? "Orders"
+                : view === "pickup"
+                ? "Pickups"
+                : view === "sales"
+                ? "Sales"
+                : view === "profile"
+                ? "Personal Information"
+                : "Messages"}
+            </h2>
+          </div>
+          <span className="dashboard-header__date">
+            {new Date().toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </span>
         </header>
 
         {view === "dashboard" && <DashboardOverview onNavigate={setView} />}

@@ -125,7 +125,7 @@ export default function StaffDashboard() {
       : navItems.find((item) => item.key === view)?.label || "Dashboard";
 
   return (
-    <div className="dashboard-layout">
+    <div className="dashboard-layout dashboard-layout--pro">
       {/* Mobile top bar */}
       <div className="mobile-topbar">
         <button
@@ -242,7 +242,18 @@ export default function StaffDashboard() {
       {/* Main content */}
       <main className="dashboard-main">
         <header className="dashboard-header">
-          <h2>{activeLabel}</h2>
+          <div className="dashboard-header__titles">
+            <span className="dashboard-header__eyebrow">Staff Portal</span>
+            <h2>{activeLabel}</h2>
+          </div>
+          <span className="dashboard-header__date">
+            {new Date().toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </span>
         </header>
 
         {view === "dashboard" && (
