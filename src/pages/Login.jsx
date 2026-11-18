@@ -21,6 +21,9 @@ export default function Login() {
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
+  const [privacyError, setPrivacyError] = useState("");
+
   const [status, setStatus] = useState({ text: "", type: "" });
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -47,6 +50,7 @@ export default function Login() {
     e.preventDefault();
     setEmailError("");
     setPasswordError("");
+    setPrivacyError("");
     setStatus({ text: "", type: "" });
 
     let valid = true;
@@ -68,6 +72,11 @@ export default function Login() {
       valid = false;
     }
 
+    if (!agreedToPrivacy) {
+      setPrivacyError("You must agree to the Data Privacy Policy to sign in.");
+      valid = false;
+    }
+
     if (!valid) return;
 
     setLoading(true);
@@ -86,6 +95,13 @@ export default function Login() {
 
   async function handleGoogleLogin() {
     setStatus({ text: "", type: "" });
+    setPrivacyError("");
+
+    if (!agreedToPrivacy) {
+      setPrivacyError("You must agree to the Data Privacy Policy to sign in.");
+      return;
+    }
+
     setGoogleLoading(true);
 
     try {
@@ -225,7 +241,27 @@ export default function Login() {
               </div>
               <div className="field-error">{passwordError}</div>
 
-              <button type="submit" disabled={loading || googleLoading} className="login-btn">
+              <label className="privacy-check">
+                <input
+                  type="checkbox"
+                  checked={agreedToPrivacy}
+                  onChange={(e) => {
+                    setAgreedToPrivacy(e.target.checked);
+                    if (e.target.checked) setPrivacyError("");
+                  }}
+                />
+                <span>
+                  I agree to the{" "}
+                  <a href="/privacy-policy" target="_blank" rel="noopener noreferrer">
+                    Data Privacy Policy
+                  </a>{" "}
+                  and consent to the collection and processing of my personal
+                  data.
+                </span>
+              </label>
+              <div className="field-error">{privacyError}</div>
+
+              <button type="submit" disabled={loading || googleLoading || !agreedToPrivacy} className="login-btn">
                 {loading ? "Signing in..." : "Sign In"}
               </button>
 
@@ -241,7 +277,7 @@ export default function Login() {
                 type="button"
                 className="google-btn"
                 onClick={handleGoogleLogin}
-                disabled={loading || googleLoading}
+                disabled={loading || googleLoading || !agreedToPrivacy}
               >
                 <svg viewBox="0 0 48 48" width="18" height="18">
                   <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l5.7-5.7C34.5 6 29.6 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.2-.1-2.4-.4-3.5Z"/>

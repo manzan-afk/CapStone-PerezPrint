@@ -19,6 +19,9 @@ import PrintableReceipt from "../components/PrintableReceipt";
 import ProfileInfo from "../components/ProfileInfo";
 import PickupOrders from "../components/PickupOrders";
 import OrderDetails from "../components/OrderDetails";
+import OrderImages from "../components/OrderImages";
+import OrderStatusTabs from "../components/OrderStatusTabs";
+import { matchesStatusTab } from "../utils/orderStatus";
 import "./StaffDashboard.css";
 import { lineOptionsSuffix } from "../utils/orderLines";
 
@@ -460,6 +463,7 @@ function OrderManagement({ sender }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [savingId, setSavingId] = useState(null);
   const [savedId, setSavedId] = useState(null);
   const [reviewOrder, setReviewOrder] = useState(null);
@@ -481,7 +485,7 @@ function OrderManagement({ sender }) {
     setError("");
     try {
       const all = await getAllOrders();
-      setOrders(all);
+      setOrders(all.map((order) => ({ ...order, savedStatus: order.status || "placed" })));
     } catch (err) {
       setError("Failed to load orders. Please try again.");
     } finally {
@@ -529,6 +533,9 @@ function OrderManagement({ sender }) {
         await updateOrderStatus(orderId, status);
       }
       setSavedId(orderId);
+      setOrders((prev) =>
+        prev.map((order) => (order.id === orderId ? { ...order, savedStatus: status } : order))
+      );
       if (status === "cancelled") {
         setOrders((prev) => prev.filter((order) => order.id !== orderId));
       }
@@ -549,7 +556,7 @@ function OrderManagement({ sender }) {
     try {
       await updateOrderStatus(orderId, "printing");
       setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: "printing" } : o))
+        prev.map((o) => (o.id === orderId ? { ...o, status: "printing", savedStatus: "printing" } : o))
       );
       setReviewOrder(null);
     } catch (err) {
@@ -566,7 +573,9 @@ function OrderManagement({ sender }) {
       const order = orders.find((item) => item.id === orderId);
       setOrders((prev) =>
         prev.map((o) =>
-          o.id === orderId ? { ...o, status: "needs_revision", staffNote: note } : o
+          o.id === orderId
+            ? { ...o, status: "needs_revision", savedStatus: "needs_revision", staffNote: note }
+            : o
         )
       );
       try {
@@ -596,6 +605,8 @@ function OrderManagement({ sender }) {
   }
 
   const filteredOrders = orders.filter((order) => {
+    if (!matchesStatusTab(order, statusFilter)) return false;
+
     const searchValue = searchTerm.trim().toLowerCase();
     if (!searchValue) return true;
 
@@ -620,6 +631,8 @@ function OrderManagement({ sender }) {
     <div className="dashboard-content">
       {error && <div className="um-error">{error}</div>}
 
+      <OrderStatusTabs orders={orders} active={statusFilter} onChange={setStatusFilter} />
+
       <div className="order-search">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
           <path
@@ -640,7 +653,7 @@ function OrderManagement({ sender }) {
       {orders.length === 0 ? (
         <div className="um-empty">No orders have been placed yet.</div>
       ) : filteredOrders.length === 0 ? (
-        <div className="um-empty">No orders match your search.</div>
+        <div className="um-empty">No orders match your filter or search.</div>
       ) : (
         <div className="ord-list">
           {filteredOrders.map((order) => {
@@ -698,6 +711,8 @@ function OrderManagement({ sender }) {
                   </div>
                 )}
 
+                <OrderImages files={order.files} />
+
                 <div className="ord-card__actions">
                   {isPlaced ? (
                     <button
@@ -713,7 +728,7 @@ function OrderManagement({ sender }) {
                         value={order.status || "placed"}
                         onChange={(e) => handleStatusChange(order.id, e.target.value)}
                       >
-                        {ORDER_STATUSES.map((s) => (
+                        {ORDER_STATUSES.filter((s) => s !== "cancelled" || order.status === "cancelled").map((s) => (
                           <option key={s} value={s}>
                             {statusLabel(s)}
                           </option>

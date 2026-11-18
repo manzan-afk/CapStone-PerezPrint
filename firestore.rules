@@ -78,6 +78,23 @@ service cloud.firestore {
     }
 
     // =========================
+    // PAYMENTS (manual GCash submissions, see paymentService.js)
+    // =========================
+    match /payments/{paymentId} {
+      allow read: if signedIn() &&
+        (
+          resource.data.customerId == request.auth.uid ||
+          isAdminOrStaff()
+        );
+
+      allow create: if signedIn() &&
+        request.resource.data.customerId == request.auth.uid &&
+        request.resource.data.status == "pending";
+
+      allow update: if isAdminOrStaff();
+    }
+
+    // =========================
     // MESSAGING
     // Each document is a single direct message, queried by
     // participants / conversationId / recipientId (see messagingService.jsx).

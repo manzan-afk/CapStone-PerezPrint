@@ -391,6 +391,21 @@
   text-decoration: underline;
 }
 
+.login-panel__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.login-panel__back:hover {
+  color: var(--orange);
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 760px) {

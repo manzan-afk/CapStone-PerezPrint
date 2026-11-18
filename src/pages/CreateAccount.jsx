@@ -31,7 +31,6 @@ export default function CreateAccount() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [phone, setPhone] = useState("");
   const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
 
   const [firstNameError, setFirstNameError] = useState("");
@@ -39,7 +38,6 @@ export default function CreateAccount() {
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
-  const [phoneError, setPhoneError] = useState("");
   const [privacyError, setPrivacyError] = useState("");
 
   const [status, setStatus] = useState({ text: "", type: "" });
@@ -56,7 +54,6 @@ export default function CreateAccount() {
     setEmailError("");
     setPasswordError("");
     setConfirmPasswordError("");
-    setPhoneError("");
     setPrivacyError("");
     setStatus({ text: "", type: "" });
 
@@ -64,7 +61,6 @@ export default function CreateAccount() {
     const trimmedFirstName = firstName.trim();
     const trimmedLastName = lastName.trim();
     const trimmedEmail = email.trim();
-    const trimmedPhone = phone.trim();
 
     if (!trimmedFirstName) {
       setFirstNameError("First name is required.");
@@ -103,14 +99,6 @@ export default function CreateAccount() {
       valid = false;
     }
 
-    if (!trimmedPhone) {
-      setPhoneError("Phone number is required for SMS notifications.");
-      valid = false;
-    } else if (!/^[0-9+\-\s()]{7,20}$/.test(trimmedPhone)) {
-      setPhoneError("Enter a valid phone number.");
-      valid = false;
-    }
-
     if (!agreedToPrivacy) {
       setPrivacyError("You must agree to the Data Privacy Policy to create an account.");
       valid = false;
@@ -128,7 +116,6 @@ export default function CreateAccount() {
         firstName: trimmedFirstName,
         lastName: trimmedLastName,
         email: trimmedEmail,
-        phone: trimmedPhone,
         role: "customer",
         agreedToPrivacyPolicy: true,
         agreedToPrivacyPolicyAt: new Date().toISOString(),
@@ -212,6 +199,9 @@ export default function CreateAccount() {
         {/* Right: sign up form */}
         <div className="login-panel">
           <div className="login-panel__inner">
+            <Link to="/" className="login-panel__back">
+              <span aria-hidden="true">←</span> Back to login
+            </Link>
             <h1 className="login-panel__title">Create your account</h1>
             <p className="login-panel__subtitle">
               Sign up to start placing orders
@@ -364,25 +354,6 @@ export default function CreateAccount() {
               </button>
             </div>
             <div className="field-error">{confirmPasswordError}</div>
-
-            <div className="input-group">
-              <span className="input-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="20" height="20">
-                  <path
-                    fill="currentColor"
-                    d="M6.6 10.8c1.4 2.7 3.9 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.2 1L6.6 10.8Z"
-                  />
-                </svg>
-              </span>
-              <input
-                type="tel"
-                placeholder="Phone number (for SMS notifications)"
-                autoComplete="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
-            </div>
-            <div className="field-error">{phoneError}</div>
 
             <label className="privacy-check">
               <input

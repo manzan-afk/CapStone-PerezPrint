@@ -1,0 +1,135 @@
+.cpay-card,
+.cpay-history {
+  max-width: 560px;
+  margin-bottom: 28px;
+}
+
+.cpay-card__title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1b2436;
+}
+
+.cpay-card__hint {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #8a92a3;
+}
+
+.cpay-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.cpay-file {
+  font-size: 13px;
+}
+
+.cpay-submit {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 10px 22px;
+  border: none;
+  border-radius: 8px;
+  background: #1b2436;
+  color: #fff;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cpay-submit:hover:not(:disabled) {
+  background: #17202f;
+}
+
+.cpay-submit:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.cpay-status {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.cpay-status--success {
+  background: #e8f6ee;
+  border: 1px solid #b7e0c6;
+  color: #1f7a45;
+}
+
+.cpay-status--error {
+  background: #fdecea;
+  border: 1px solid #f5c2c0;
+  color: #b3261e;
+}
+
+.cpay-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cpay-item {
+  background: #fff;
+  border: 1px solid #e2e5ea;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.cpay-item__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #1b2436;
+}
+
+.cpay-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: #8a92a3;
+}
+
+.cpay-item__proof {
+  display: inline-block;
+  margin-top: 10px;
+  width: 84px;
+  height: 84px;
+  border: 1px solid #e2e5ea;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.cpay-item__proof img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cpay-badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: #fff4e5;
+  color: #b86200;
+}
+
+.cpay-badge--verified {
+  background: #e8f6ee;
+  color: #1f7a45;
+}
+
+.cpay-badge--rejected {
+  background: #fdecea;
+  color: #b3261e;
+}

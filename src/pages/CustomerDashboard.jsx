@@ -12,9 +12,9 @@ import {
   createOrder,
   getUserOrders,
   subscribeUserOrders,
-  cancelOrder,
 } from "../services/ordersService";
 import ProfileInfo from "../components/ProfileInfo";
+import CustomerPayments from "../components/CustomerPayments";
 import "./CustomerDashboard.css";
 import {
   lineOptionsSuffix,
@@ -292,6 +292,7 @@ export default function CustomerDashboard() {
 
         {view === "pickup" && <PickupSchedule uid={user?.uid} />}
 
+        {view === "payments" && <CustomerPayments uid={user?.uid} email={user?.email} />}
         {view === "profile" && <ProfileInfo user={user} profile={profile} />}
 
         {view === "messages" && (
@@ -302,7 +303,7 @@ export default function CustomerDashboard() {
           />
         )}
 
-        {view !== "dashboard" && view !== "services" && view !== "orders" && view !== "notifications" && view !== "pickup" && view !== "messages" && (
+        {view !== "dashboard" && view !== "services" && view !== "orders" && view !== "notifications" && view !== "pickup" && view !== "payments" && view !== "messages" && (
           <div className="dashboard-content dashboard-content--empty">
             Coming soon.
           </div>
@@ -1460,7 +1461,6 @@ function OrderHistory({ uid, customerName }) {
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [cancellingId, setCancellingId] = useState(null);
 
   useEffect(() => {
     async function loadServices() {
@@ -1493,24 +1493,6 @@ function OrderHistory({ uid, customerName }) {
       );
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function handleCancel(order) {
-    if (!window.confirm("Cancel this order? This cannot be undone.")) return;
-    setCancellingId(order.id);
-    setError("");
-    try {
-      await cancelOrder(order.id);
-      setOrders((previous) => previous.filter((item) => item.id !== order.id));
-    } catch (err) {
-      setError(
-        err.code === "order-not-cancellable"
-          ? err.message
-          : "Failed to cancel the order. Please try again."
-      );
-    } finally {
-      setCancellingId(null);
     }
   }
 
@@ -1655,20 +1637,6 @@ function OrderHistory({ uid, customerName }) {
                       </a>
                     ))}
                   </div>
-                )}
-                {(order.status || "placed") === "placed" && (
-                  <button
-                    type="button"
-                    className="order-card__cancel-btn"
-                    disabled={cancellingId === order.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCancel(order);
-                    }}
-                    onKeyDown={(e) => e.stopPropagation()}
-                  >
-                    {cancellingId === order.id ? "Cancelling..." : "Cancel order"}
-                  </button>
                 )}
               </div>
             );

@@ -1511,29 +1511,6 @@
   text-decoration: line-through;
 }
 
-.order-card__cancel-btn {
-  margin-top: 10px;
-  padding: 6px 12px;
-  border: 1px solid #f0b8b8;
-  border-radius: 7px;
-  background: var(--white);
-  color: #a33333;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.order-card__cancel-btn:hover:not(:disabled) {
-  background: #fff7f7;
-  border-color: #a33333;
-}
-
-.order-card__cancel-btn:disabled {
-  cursor: wait;
-  opacity: 0.6;
-}
-
 .order-card__revision-note {
   background: #fdecea;
   border: 1px solid #f5c2c0;

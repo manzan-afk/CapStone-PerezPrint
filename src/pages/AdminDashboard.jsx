@@ -24,6 +24,9 @@ import useSidebarOrderCounts from "../hooks/useSidebarOrderCounts";
 import ProfileInfo from "../components/ProfileInfo";
 import PickupOrders from "../components/PickupOrders";
 import OrderDetails from "../components/OrderDetails";
+import OrderImages from "../components/OrderImages";
+import OrderStatusTabs from "../components/OrderStatusTabs";
+import { matchesStatusTab } from "../utils/orderStatus";
 import "./AdminDashboard.css";
 import { lineOptionsSuffix, getServiceUnits, formatPerUnit, formatTypeLabel } from "../utils/orderLines";
 
@@ -2045,6 +2048,7 @@ function OrderManagement({ sender }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [savingId, setSavingId] = useState(null);
   const [savedId, setSavedId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
@@ -2066,7 +2070,7 @@ function OrderManagement({ sender }) {
     setError("");
     try {
       const all = await getAllOrders();
-      setOrders(all);
+      setOrders(all.map((order) => ({ ...order, savedStatus: order.status || "placed" })));
     } catch (err) {
       setError("Failed to load orders. Please try again.");
     } finally {
@@ -2114,6 +2118,9 @@ function OrderManagement({ sender }) {
         await updateOrderStatus(orderId, status);
       }
       setSavedId(orderId);
+      setOrders((prev) =>
+        prev.map((order) => (order.id === orderId ? { ...order, savedStatus: status } : order))
+      );
       if (status === "cancelled") {
         setOrders((prev) => prev.filter((order) => order.id !== orderId));
       }
@@ -2159,6 +2166,8 @@ function OrderManagement({ sender }) {
   }
 
   const filteredOrders = orders.filter((order) => {
+    if (!matchesStatusTab(order, statusFilter)) return false;
+
     const searchValue = searchTerm.trim().toLowerCase();
     if (!searchValue) return true;
 
@@ -2182,6 +2191,8 @@ function OrderManagement({ sender }) {
   return (
     <div className="dashboard-content">
       {error && <div className="um-error">{error}</div>}
+
+      <OrderStatusTabs orders={orders} active={statusFilter} onChange={setStatusFilter} />
 
       <div className="um-toolbar">
         <div className="um-search">
@@ -2268,13 +2279,14 @@ function OrderManagement({ sender }) {
                 </div>
               )}
 
+              <OrderImages files={order.files} />
               <div className="ord-card__actions">
                 <select
                   className="um-role-select"
                   value={order.status || "placed"}
                   onChange={(e) => handleStatusChange(order.id, e.target.value)}
                 >
-                  {ORDER_STATUSES.map((s) => (
+                  {ORDER_STATUSES.filter((s) => s !== "cancelled" || order.status === "cancelled").map((s) => (
                     <option key={s} value={s}>
                       {statusLabel(s)}
                     </option>
