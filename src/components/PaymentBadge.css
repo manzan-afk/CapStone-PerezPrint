@@ -1,0 +1,57 @@
+.pay-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: #eef1f5;
+  color: #4b5563;
+}
+
+.pay-badge--pending {
+  background: #fff4e0;
+  color: #b0670e;
+}
+
+.pay-badge--verified {
+  background: #e3f6ec;
+  color: #1e8a53;
+}
+
+.pay-badge--rejected {
+  background: #fdecea;
+  color: #b3261e;
+}
+
+.pay-badge--refunded {
+  background: #e6f0ff;
+  color: #1d5fd6;
+}
+
+.ord-card__badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ord-card__payment-hint {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff4e5;
+  color: #8a5300;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.review-payment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #3a4256;
+}

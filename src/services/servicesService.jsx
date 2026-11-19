@@ -20,11 +20,12 @@ const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 /**
- * Uploads a service image to Cloudinary.
+ * Uploads an image to Cloudinary (service images by default).
  * @param {File} file
+ * @param {string} [folder] - Cloudinary folder to store the image in
  * @returns {Promise<string>} the image's public URL
  */
-export async function uploadServiceImage(file) {
+export async function uploadServiceImage(file, folder = "services") {
   if (!file || !IMAGE_TYPES.has(file.type)) {
     throw new Error("Please choose a JPG, PNG, or WebP image.");
   }
@@ -35,7 +36,7 @@ export async function uploadServiceImage(file) {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-  formData.append("folder", "services");
+  formData.append("folder", folder);
 
   const response = await fetch(
     `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,

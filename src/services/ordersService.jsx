@@ -18,6 +18,7 @@ import {
   runTransaction,
 } from "firebase/firestore";
 import { db } from "../firebase-config";
+import { canSetOrderStatus, getOrderPaymentStatus, PAYMENT_REQUIRED_MESSAGE } from "../utils/orderStatus";
 
 function mapVisibleOrders(snapshot) {
   return snapshot.docs
@@ -89,7 +90,9 @@ export async function createOrder(data) {
     ...data,
     referenceId,
     status: "placed",
+    paymentStatus: "unpaid",
     createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
   return { id: docRef.id, referenceId };
 }
@@ -155,7 +158,8 @@ export function subscribeAllOrders(onOrders, onError) {
  * @returns {Promise<void>}
  */
 export function updateOrderStatus(orderId, status) {
-  const updates = { status, statusUpdatedAt: serverTimestamp() };
+  const orderRef = doc(db, "orders", orderId);
+  const updates = { status, statusUpdatedAt: serverTimestamp(), updatedAt: serverTimestamp() };
   if (status === "ready") {
     updates.pickupReadyAt = serverTimestamp();
   }
@@ -164,7 +168,20 @@ export function updateOrderStatus(orderId, status) {
     updates.isArchived = true;
     updates.archivedAt = serverTimestamp();
   }
-  return updateDoc(doc(db, "orders", orderId), updates);
+
+  // Re-read the order so the payment gate can't be bypassed with stale data (rules enforce it too).
+  return runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(orderRef);
+    if (!snapshot.exists()) {
+      throw new Error("This order no longer exists.");
+    }
+    if (!canSetOrderStatus(snapshot.data(), status)) {
+      const error = new Error(PAYMENT_REQUIRED_MESSAGE);
+      error.code = "payment-not-verified";
+      throw error;
+    }
+    transaction.update(orderRef, updates);
+  });
 }
 
 /**
@@ -183,9 +200,17 @@ export function cancelOrder(orderId) {
       error.code = "order-not-cancellable";
       throw error;
     }
+    if (!["unpaid", "rejected"].includes(getOrderPaymentStatus(snapshot.data()))) {
+      const error = new Error(
+        "This order has a payment on file and can no longer be cancelled. Please contact the shop."
+      );
+      error.code = "order-has-payment";
+      throw error;
+    }
     transaction.update(orderRef, {
       status: "cancelled",
       statusUpdatedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
       cancelledAt: serverTimestamp(),
       isArchived: true,
       archivedAt: serverTimestamp(),
@@ -205,6 +230,7 @@ export function requestOrderRevision(orderId, note) {
     status: "needs_revision",
     staffNote: note,
     statusUpdatedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
     revisionRequestedAt: serverTimestamp(),
   });
 }

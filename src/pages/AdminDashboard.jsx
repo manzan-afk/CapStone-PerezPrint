@@ -26,6 +26,11 @@ import PickupOrders from "../components/PickupOrders";
 import OrderDetails from "../components/OrderDetails";
 import OrderImages from "../components/OrderImages";
 import OrderStatusTabs from "../components/OrderStatusTabs";
+import PaymentSettings from "../components/PaymentSettings";
+import PaymentVerification from "../components/PaymentVerification";
+import PaymentBadge from "../components/PaymentBadge";
+import { canSetOrderStatus, getOrderPaymentStatus, PAYMENT_REQUIRED_MESSAGE } from "../utils/orderStatus";
+import usePendingPaymentCount from "../hooks/usePendingPaymentCount";
 import { matchesStatusTab } from "../utils/orderStatus";
 import "./AdminDashboard.css";
 import { lineOptionsSuffix, getServiceUnits, formatPerUnit, formatTypeLabel } from "../utils/orderLines";
@@ -39,6 +44,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
   const orderCounts = useSidebarOrderCounts(user?.uid, "admin");
+  const pendingPayments = usePendingPaymentCount(Boolean(user?.uid));
 
   async function handleLogout() {
     await logout();
@@ -190,6 +196,43 @@ export default function AdminDashboard() {
 
           <a
             href="#"
+            className={`nav-item ${view === "payments" ? "nav-item--active" : ""}`}
+            onClick={(e) => {
+              e.preventDefault();
+              setView("payments");
+              setSidebarOpen(false);
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20">
+              <path
+                fill="currentColor"
+                d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-1 15-4-4 1.4-1.4 2.6 2.6 5.6-5.6L18 9.9 11 17Z"
+              />
+            </svg>
+            Payments
+            <SidebarCountBadge count={pendingPayments} label="payments pending review" />
+          </a>
+
+          <a
+            href="#"
+            className={`nav-item ${view === "paymentSettings" ? "nav-item--active" : ""}`}
+            onClick={(e) => {
+              e.preventDefault();
+              setView("paymentSettings");
+              setSidebarOpen(false);
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20">
+              <path
+                fill="currentColor"
+                d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm1 2v2h16V7H4Zm0 4v6h16v-6H4Zm2 2h5v2H6v-2Z"
+              />
+            </svg>
+            Payment Settings
+          </a>
+
+          <a
+            href="#"
             className={`nav-item ${view === "messages" ? "nav-item--active" : ""}`}
             onClick={(e) => {
               e.preventDefault();
@@ -282,6 +325,10 @@ export default function AdminDashboard() {
                 ? "Pickups"
                 : view === "sales"
                 ? "Sales"
+                : view === "payments"
+                ? "Payments"
+                : view === "paymentSettings"
+                ? "Payment Settings"
                 : view === "profile"
                 ? "Personal Information"
                 : "Messages"}
@@ -314,6 +361,10 @@ export default function AdminDashboard() {
         )}
 
         {view === "sales" && <SalesManagement />}
+
+        {view === "payments" && <PaymentVerification />}
+
+        {view === "paymentSettings" && <PaymentSettings />}
 
         {view === "pickup" && <PickupOrders />}
 
@@ -2126,7 +2177,17 @@ function OrderManagement({ sender }) {
       }
       setTimeout(() => setSavedId(null), 2000);
     } catch (err) {
-      setError("Failed to update status. Please try again.");
+      setError(
+        err.code === "payment-not-verified" || err.code === "permission-denied"
+          ? PAYMENT_REQUIRED_MESSAGE
+          : "Failed to update status. Please try again."
+      );
+      // Put the dropdown back on the last saved status.
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === orderId ? { ...order, status: order.savedStatus } : order
+        )
+      );
     } finally {
       setSavingId(null);
     }
@@ -2237,8 +2298,11 @@ function OrderManagement({ sender }) {
                   <span className="ord-card__service">{summarizeOrder(order)}</span>
                   <span className="ord-card__date">{formatDate(order.createdAt)}</span>
                 </div>
-                <span className={`order-status order-status--${order.status || "placed"}`}>
-                  {statusLabel(order.status)}
+                <span className="ord-card__badges">
+                  <PaymentBadge status={order.paymentStatus} />
+                  <span className={`order-status order-status--${order.status || "placed"}`}>
+                    {statusLabel(order.status)}
+                  </span>
                 </span>
               </div>
 
@@ -2287,7 +2351,7 @@ function OrderManagement({ sender }) {
                   onChange={(e) => handleStatusChange(order.id, e.target.value)}
                 >
                   {ORDER_STATUSES.filter((s) => s !== "cancelled" || order.status === "cancelled").map((s) => (
-                    <option key={s} value={s}>
+                    <option key={s} value={s} disabled={!canSetOrderStatus(order, s)}>
                       {statusLabel(s)}
                     </option>
                   ))}
@@ -2326,6 +2390,13 @@ function OrderManagement({ sender }) {
                   </button>
                 )}
               </div>
+              {(order.status || "placed") === "placed" && getOrderPaymentStatus(order) !== "verified" && (
+                <div className="ord-card__payment-hint">
+                  {getOrderPaymentStatus(order) === "pending"
+                    ? "Payment is awaiting verification. Printing is locked until it is verified."
+                    : "Waiting for full payment. Printing is locked until it is verified."}
+                </div>
+              )}
               {order.status === "needs_revision" && (
                 <div className="ord-revision-field">
                   <label htmlFor={`admin-revision-note-${order.id}`}>Problem with the order</label>

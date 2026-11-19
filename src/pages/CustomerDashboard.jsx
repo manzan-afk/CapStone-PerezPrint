@@ -15,6 +15,8 @@ import {
 } from "../services/ordersService";
 import ProfileInfo from "../components/ProfileInfo";
 import CustomerPayments from "../components/CustomerPayments";
+import PaymentBadge from "../components/PaymentBadge";
+import { getOrderPaymentStatus } from "../utils/orderStatus";
 import "./CustomerDashboard.css";
 import {
   lineOptionsSuffix,
@@ -27,6 +29,7 @@ import {
 export default function CustomerDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [view, setView] = useState("dashboard"); // "dashboard" | "services" | "orders" | ...
+  const [payOrderId, setPayOrderId] = useState("");
   const [profileImageFailed, setProfileImageFailed] = useState(false);
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
@@ -273,7 +276,10 @@ export default function CustomerDashboard() {
                 ? `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim()
                 : user?.email || "Customer"
             }
-            onOrderPlaced={() => setView("orders")}
+            onOrderPlaced={(orderId) => {
+              setPayOrderId(orderId || "");
+              setView("payments");
+            }}
           />
         )}
 
@@ -292,7 +298,15 @@ export default function CustomerDashboard() {
 
         {view === "pickup" && <PickupSchedule uid={user?.uid} />}
 
-        {view === "payments" && <CustomerPayments uid={user?.uid} email={user?.email} />}
+        {view === "payments" && (
+          <CustomerPayments
+            key={payOrderId}
+            uid={user?.uid}
+            email={user?.email}
+            customerName={`${profile?.firstName || ""} ${profile?.lastName || ""}`.trim()}
+            initialOrderId={payOrderId}
+          />
+        )}
         {view === "profile" && <ProfileInfo user={user} profile={profile} />}
 
         {view === "messages" && (
@@ -428,15 +442,20 @@ function OrderNotifications({ uid }) {
     return <div className="dashboard-content">Loading notifications...</div>;
   }
 
-  const notifications = [...orders].sort((first, second) => {
-    const firstTime = first.statusUpdatedAt?.toDate?.()?.getTime()
-      || first.createdAt?.toDate?.()?.getTime()
-      || 0;
-    const secondTime = second.statusUpdatedAt?.toDate?.()?.getTime()
-      || second.createdAt?.toDate?.()?.getTime()
-      || 0;
-    return secondTime - firstTime;
-  });
+  // Payment reviews change updatedAt but not statusUpdatedAt, so use whichever is newer.
+  const latestChange = (order) => Math.max(
+    order.statusUpdatedAt?.toDate?.()?.getTime() || 0,
+    order.updatedAt?.toDate?.()?.getTime() || 0,
+    order.createdAt?.toDate?.()?.getTime() || 0
+  );
+  const notifications = [...orders].sort((first, second) => latestChange(second) - latestChange(first));
+
+  const paymentCopy = {
+    pending: "Your payment is waiting to be verified. Printing starts after it is verified.",
+    verified: "Your payment was verified. We'll start printing your order.",
+    rejected: "Your payment was rejected. Open Payments to see the reason and submit it again.",
+    refunded: "Your payment was refunded.",
+  };
 
   const statusCopy = {
     placed: "We received your order and will begin processing it.",
@@ -458,6 +477,7 @@ function OrderNotifications({ uid }) {
           {notifications.map((order) => {
             const status = order.status || "placed";
             const lines = getOrderLines(order);
+            const paymentStatus = getOrderPaymentStatus(order);
             const messageTime = order.statusUpdatedAt
               || order.pickupReadyAt
               || order.revisionRequestedAt
@@ -478,8 +498,13 @@ function OrderNotifications({ uid }) {
                   <time>{formatTimestamp(messageTime)}</time>
                 </div>
                 <p>{statusCopy[status] || `Your order status is ${status}.`}</p>
+                {paymentCopy[paymentStatus] && <p>{paymentCopy[paymentStatus]}</p>}
 
                 <dl className="order-notification__details">
+                  <div>
+                    <dt>Payment</dt>
+                    <dd><PaymentBadge status={paymentStatus} /></dd>
+                  </div>
                   <div>
                     <dt>Tracking number</dt>
                     <dd>{order.referenceId || "Not available"}</dd>
@@ -910,9 +935,9 @@ function ServicesBrowser({ uid, email, customerName, onOrderPlaced }) {
           email={email}
           customerName={customerName}
           onClose={() => setCartService(null)}
-          onSubmitted={() => {
+          onSubmitted={(orderId) => {
             setCartService(null);
-            if (onOrderPlaced) onOrderPlaced();
+            if (onOrderPlaced) onOrderPlaced(orderId);
           }}
         />
       )}
@@ -1141,7 +1166,7 @@ function OrderCartModal({ initialService, uid, email, customerName, onClose, onS
       <Receipt
         order={placedOrder}
         customerName={customerName}
-        onClose={() => onSubmitted()}
+        onClose={() => onSubmitted(placedOrder.id)}
       />
     );
   }
@@ -1434,6 +1459,7 @@ function Receipt({ order, customerName, onClose }) {
 
         <p className="receipt__total">
           TOTAL: {order.totalPrice != null ? `₱${Number(order.totalPrice).toFixed(2)}` : "—"}
+          {getOrderPaymentStatus(order) === "verified" && " · PAID"}
         </p>
 
         <div className="receipt__reference-box">
@@ -1597,8 +1623,11 @@ function OrderHistory({ uid, customerName }) {
                 )}
                 <div className="order-card__top">
                   <span className="order-card__service">{summary}</span>
-                  <span className={`order-status order-status--${order.status || "placed"}`}>
-                    {statusLabel(order.status)}
+                  <span className="order-card__status-group">
+                    <PaymentBadge status={order.paymentStatus} />
+                    <span className={`order-status order-status--${order.status || "placed"}`}>
+                      {statusLabel(order.status)}
+                    </span>
                   </span>
                 </div>
                 <div className="order-card__timestamp">

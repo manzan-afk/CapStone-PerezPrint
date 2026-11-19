@@ -203,6 +203,29 @@ export async function sendDirectMessage({
   });
 }
 
+// Tells a customer the outcome of their payment review ("verified" or "rejected").
+export function sendPaymentReviewMessage({ payment, sender, outcome, reason = "" }) {
+  if (!sender?.id) throw new Error("Staff account is unavailable.");
+  if (!payment?.customerId) throw new Error("Customer account is unavailable.");
+
+  const orderLabel = payment.orderReference ? `order ${payment.orderReference}` : "your order";
+  const text =
+    outcome === "verified"
+      ? `Your payment for ${orderLabel} (₱${Number(payment.amount).toFixed(2)}, ref. ${payment.referenceNumber}) was verified. We'll start printing soon.`
+      : `Your payment for ${orderLabel} (ref. ${payment.referenceNumber}) was rejected.\nReason: ${reason}\nPlease submit the payment again from the Payments page.`;
+
+  return sendDirectMessage({
+    conversationId: getConversationId(sender.id, payment.customerId),
+    sender,
+    recipient: {
+      id: payment.customerId,
+      name: payment.customerName || payment.customerEmail || "Customer",
+      role: "customer",
+    },
+    text,
+  });
+}
+
 export function sendOrderRevisionMessage({ order, sender, note }) {
   const trimmedNote = (note || "").trim();
   if (!sender?.id) throw new Error("Staff account is unavailable.");

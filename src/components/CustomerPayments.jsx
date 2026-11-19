@@ -1,20 +1,22 @@
 import { useState, useEffect, useRef } from "react";
 import { getUserOrders, uploadOrderFiles } from "../services/ordersService";
-import { submitPayment, getCustomerPayments } from "../services/paymentService";
+import {
+  submitPayment,
+  getCustomerPayments,
+  getPaymentSettings,
+  normalizeReference,
+  PAYMENT_OPTIONS,
+} from "../services/paymentService";
+import { PAYMENT_STATUS_LABELS } from "../utils/orderStatus";
 import "./CustomerPayments.css";
 
 const MAX_PROOF_BYTES = 5 * 1024 * 1024;
-const PAYMENT_STATUS_LABELS = {
-  pending: "Pending review",
-  verified: "Verified",
-  rejected: "Rejected",
-};
 
 const PAYMENT_STEPS = [
-  "Send the exact order amount through GCash.",
+  "Send the exact order amount through GCash (number or QR code).",
   "Copy the reference number from your GCash receipt.",
-  "Fill in the form and attach a screenshot of the receipt.",
-  "The shop verifies your payment and updates its status here.",
+  "Enter the amount you sent and attach a screenshot of the receipt.",
+  "The shop verifies your payment. Printing starts only after it is verified.",
 ];
 
 function formatDate(value) {
@@ -37,13 +39,17 @@ function formatPeso(value) {
   })}`;
 }
 
-export default function CustomerPayments({ uid, email }) {
+export default function CustomerPayments({ uid, email, customerName = "", initialOrderId = "" }) {
   const [orders, setOrders] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [paymentSettings, setPaymentSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
-  const [orderId, setOrderId] = useState("");
+  const [orderId, setOrderId] = useState(initialOrderId);
+  const [paymentOption, setPaymentOption] = useState(PAYMENT_OPTIONS[0]);
+  // null until the customer edits it; then the field shows the selected order's total.
+  const [amountEdit, setAmountEdit] = useState(null);
   const [referenceNumber, setReferenceNumber] = useState("");
   const [proofFile, setProofFile] = useState(null);
   const [proofPreview, setProofPreview] = useState("");
@@ -74,12 +80,18 @@ export default function CustomerPayments({ uid, email }) {
     setLoading(true);
     setLoadError("");
     try {
-      const [userOrders, userPayments] = await Promise.all([
+      const [userOrders, userPayments, settings] = await Promise.all([
         getUserOrders(uid),
         getCustomerPayments(uid),
+        // The shop details are optional; a failure here shouldn't hide the rest of the page.
+        getPaymentSettings().catch((err) => {
+          console.error("Failed to load payment settings:", err);
+          return null;
+        }),
       ]);
       setOrders(userOrders);
       setPayments(userPayments);
+      setPaymentSettings(settings);
     } catch (err) {
       console.error("Failed to load payments:", err);
       setLoadError(
@@ -95,7 +107,7 @@ export default function CustomerPayments({ uid, email }) {
   // Orders that can still be paid: priced, not cancelled, and without a pending or verified payment.
   const blockedOrderIds = new Set(
     payments
-      .filter((payment) => payment.status === "pending" || payment.status === "verified")
+      .filter((payment) => payment.paymentStatus === "pending" || payment.paymentStatus === "verified")
       .map((payment) => payment.orderId)
   );
   const payableOrders = orders.filter(
@@ -107,11 +119,24 @@ export default function CustomerPayments({ uid, email }) {
   const selectedOrder = payableOrders.find((order) => order.id === orderId) || null;
 
   const amountDue = payableOrders.reduce((sum, order) => sum + Number(order.totalPrice), 0);
-  const pendingPayments = payments.filter((payment) => payment.status === "pending");
+  const pendingPayments = payments.filter((payment) => payment.paymentStatus === "pending");
   const amountPending = pendingPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
   const amountVerified = payments
-    .filter((payment) => payment.status === "verified")
+    .filter((payment) => payment.paymentStatus === "verified")
     .reduce((sum, payment) => sum + Number(payment.amount), 0);
+
+  const amountSent =
+    amountEdit ?? (selectedOrder ? String(Number(selectedOrder.totalPrice)) : "");
+  const sentValue = Number(amountSent);
+  const amountDiffers =
+    selectedOrder && amountSent !== "" && sentValue > 0 &&
+    Math.round(sentValue * 100) !== Math.round(Number(selectedOrder.totalPrice) * 100);
+
+  function handleOrderChange(event) {
+    setOrderId(event.target.value);
+    setAmountEdit(null);
+    setErrors((previous) => ({ ...previous, order: "", amount: "" }));
+  }
 
   function handleFileChange(event) {
     setProof(event.target.files?.[0] || null);
@@ -132,10 +157,22 @@ export default function CustomerPayments({ uid, email }) {
 
     if (!selectedOrder) nextErrors.order = "Select the order you are paying for.";
 
+    if (!(sentValue > 0)) {
+      nextErrors.amount = "Enter the amount you sent.";
+    }
+
     if (!trimmedReference) {
       nextErrors.reference = "Enter the GCash reference number.";
     } else if (!/^[A-Za-z0-9\s-]{6,30}$/.test(trimmedReference)) {
       nextErrors.reference = "Enter a valid reference number (6–30 letters or numbers).";
+    } else if (
+      payments.some(
+        (payment) =>
+          payment.paymentStatus !== "rejected" &&
+          normalizeReference(payment.referenceNumber) === normalizeReference(trimmedReference)
+      )
+    ) {
+      nextErrors.reference = "You already submitted a payment with this reference number.";
     }
 
     if (!proofFile) {
@@ -155,18 +192,22 @@ export default function CustomerPayments({ uid, email }) {
       await submitPayment({
         orderId: selectedOrder.id,
         orderReference: selectedOrder.referenceId || "",
+        orderAmount: selectedOrder.totalPrice,
         customerId: uid,
         customerEmail: email,
-        amount: selectedOrder.totalPrice,
+        customerName,
+        paymentOption,
+        amount: sentValue,
         referenceNumber: trimmedReference,
-        proofUrl: proof.url,
+        receiptUrl: proof.url,
       });
 
       setOrderId("");
+      setAmountEdit(null);
       setReferenceNumber("");
       clearFile();
       setStatus({
-        text: "Payment submitted. The shop will verify it shortly.",
+        text: "Payment submitted. Your order stays on hold until the shop verifies it.",
         type: "success",
       });
       await loadData();
@@ -214,6 +255,39 @@ export default function CustomerPayments({ uid, email }) {
         </div>
       </div>
 
+      <section className="cpay-card cpay-send">
+        <header className="cpay-card__header">
+          <h3>Send payment to</h3>
+          <p>Pay through GCash using these details, then submit your receipt below.</p>
+        </header>
+        {paymentSettings?.accountName || paymentSettings?.gcashNumber || paymentSettings?.qrUrl ? (
+          <div className="cpay-send__body">
+            <dl className="cpay-send__details">
+              <div>
+                <dt>GCash account name</dt>
+                <dd>{paymentSettings.accountName || "—"}</dd>
+              </div>
+              <div>
+                <dt>GCash number</dt>
+                <dd>{paymentSettings.gcashNumber || "—"}</dd>
+              </div>
+            </dl>
+            {paymentSettings.qrUrl && (
+              <img
+                className="cpay-send__qr"
+                src={paymentSettings.qrUrl}
+                alt="GCash QR code"
+              />
+            )}
+          </div>
+        ) : (
+          <div className="cpay-empty">
+            <strong>Payment details not available yet</strong>
+            <span>Please contact the shop for its GCash details.</span>
+          </div>
+        )}
+      </section>
+
       <div className="cpay-layout">
         <section className="cpay-card">
           <header className="cpay-card__header">
@@ -240,10 +314,7 @@ export default function CustomerPayments({ uid, email }) {
                   id="payOrder"
                   className="cpay-input"
                   value={orderId}
-                  onChange={(event) => {
-                    setOrderId(event.target.value);
-                    setErrors((previous) => ({ ...previous, order: "" }));
-                  }}
+                  onChange={handleOrderChange}
                 >
                   <option value="">Select an order</option>
                   {payableOrders.map((order) => (
@@ -253,6 +324,53 @@ export default function CustomerPayments({ uid, email }) {
                   ))}
                 </select>
                 {errors.order && <span className="cpay-error">{errors.order}</span>}
+              </div>
+
+              <div className="cpay-field">
+                <span className="cpay-label">How did you pay?</span>
+                <div className="cpay-options" role="radiogroup" aria-label="Payment option">
+                  {PAYMENT_OPTIONS.map((option) => (
+                    <label
+                      key={option}
+                      className={`cpay-option${paymentOption === option ? " cpay-option--active" : ""}`}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentOption"
+                        value={option}
+                        checked={paymentOption === option}
+                        onChange={() => setPaymentOption(option)}
+                      />
+                      {option === "QR Code" ? "Scanned the QR code" : "Sent to the GCash number"}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="cpay-field">
+                <label className="cpay-label" htmlFor="payAmount">Amount sent (₱)</label>
+                <input
+                  id="payAmount"
+                  className="cpay-input"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={amountSent}
+                  onChange={(event) => {
+                    setAmountEdit(event.target.value);
+                    setErrors((previous) => ({ ...previous, amount: "" }));
+                  }}
+                />
+                {errors.amount && <span className="cpay-error">{errors.amount}</span>}
+                {amountDiffers && (
+                  <span className="cpay-warning">
+                    This doesn't match the order total of {formatPeso(selectedOrder.totalPrice)}.
+                    Printing only starts after the full amount is verified, so a partial payment
+                    will be rejected.
+                  </span>
+                )}
               </div>
 
               <div className="cpay-field">
@@ -331,8 +449,8 @@ export default function CustomerPayments({ uid, email }) {
             ))}
           </ol>
           <p className="cpay-note">
-            Make sure the amount matches your order total exactly. Payments that don't match may
-            be rejected, and you can resubmit them from this page.
+            Perez Printing Shop requires 100% payment before printing. Make sure the amount
+            matches your order total exactly. Rejected payments can be resubmitted from this page.
           </p>
         </aside>
       </div>
@@ -367,20 +485,23 @@ export default function CustomerPayments({ uid, email }) {
                 <span role="cell" data-label="Reference no.">{payment.referenceNumber}</span>
                 <span role="cell" data-label="Submitted">{formatDate(payment.createdAt)}</span>
                 <span role="cell" data-label="Status">
-                  <span className={`cpay-badge cpay-badge--${payment.status}`}>
-                    {PAYMENT_STATUS_LABELS[payment.status] || payment.status}
+                  <span className={`cpay-badge cpay-badge--${payment.paymentStatus}`}>
+                    {PAYMENT_STATUS_LABELS[payment.paymentStatus] || payment.paymentStatus}
                   </span>
+                  {payment.paymentStatus === "rejected" && payment.rejectionReason && (
+                    <span className="cpay-reason">Reason: {payment.rejectionReason}</span>
+                  )}
                 </span>
                 <span role="cell" data-label="Proof">
-                  {payment.proofUrl ? (
+                  {payment.receiptUrl ? (
                     <a
                       className="cpay-thumb"
-                      href={payment.proofUrl}
+                      href={payment.receiptUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       title="View proof of payment"
                     >
-                      <img src={payment.proofUrl} alt="Proof of payment" loading="lazy" />
+                      <img src={payment.receiptUrl} alt="Proof of payment" loading="lazy" />
                     </a>
                   ) : (
                     "—"

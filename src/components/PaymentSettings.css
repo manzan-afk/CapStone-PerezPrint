@@ -1,0 +1,13 @@
+.paysettings {
+  max-width: 520px;
+}
+
+.paysettings__qr {
+  width: 180px;
+  height: 180px;
+  object-fit: contain;
+  border: 1px solid #e2e5ea;
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px;
+}

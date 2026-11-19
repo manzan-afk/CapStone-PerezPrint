@@ -21,6 +21,10 @@ import PickupOrders from "../components/PickupOrders";
 import OrderDetails from "../components/OrderDetails";
 import OrderImages from "../components/OrderImages";
 import OrderStatusTabs from "../components/OrderStatusTabs";
+import PaymentVerification from "../components/PaymentVerification";
+import PaymentBadge from "../components/PaymentBadge";
+import { canSetOrderStatus, getOrderPaymentStatus, PAYMENT_REQUIRED_MESSAGE } from "../utils/orderStatus";
+import usePendingPaymentCount from "../hooks/usePendingPaymentCount";
 import { matchesStatusTab } from "../utils/orderStatus";
 import "./StaffDashboard.css";
 import { lineOptionsSuffix } from "../utils/orderLines";
@@ -53,6 +57,7 @@ export default function StaffDashboard() {
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
   const orderCounts = useSidebarOrderCounts(user?.uid, "staff");
+  const pendingPayments = usePendingPaymentCount(Boolean(user?.uid));
 
   async function handleLogout() {
     await logout();
@@ -107,6 +112,16 @@ export default function StaffDashboard() {
         <path
           fill="currentColor"
           d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2Zm6-6v-5a6 6 0 0 0-4-5.65V4a2 2 0 0 0-4 0v1.35A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2Z"
+        />
+      ),
+    },
+    {
+      key: "payments",
+      label: "Payments",
+      icon: (
+        <path
+          fill="currentColor"
+          d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-1 15-4-4 1.4-1.4 2.6 2.6 5.6-5.6L18 9.9 11 17Z"
         />
       ),
     },
@@ -182,6 +197,9 @@ export default function StaffDashboard() {
                 <SidebarCountBadge count={orderCounts.readyPickups} label="ready pickups" />
               )}
               {item.key === "messages" && <UnreadMessageBadge uid={user?.uid} />}
+              {item.key === "payments" && (
+                <SidebarCountBadge count={pendingPayments} label="payments pending review" />
+              )}
             </a>
           ))}
         </nav>
@@ -294,7 +312,9 @@ export default function StaffDashboard() {
 
         {view === "sales" && <SalesManagement />}
 
-        {view !== "dashboard" && view !== "orders" && view !== "messages" && view !== "profile" && view !== "pickup" && view !== "sales" && (
+        {view === "payments" && <PaymentVerification />}
+
+        {view !== "dashboard" && view !== "orders" && view !== "messages" && view !== "profile" && view !== "pickup" && view !== "sales" && view !== "payments" && (
           <div className="dashboard-content dashboard-content--empty">
             Coming soon.
           </div>
@@ -545,7 +565,17 @@ function OrderManagement({ sender }) {
       }
       setTimeout(() => setSavedId(null), 2000);
     } catch (err) {
-      setError("Failed to update status. Please try again.");
+      setError(
+        err.code === "payment-not-verified" || err.code === "permission-denied"
+          ? PAYMENT_REQUIRED_MESSAGE
+          : "Failed to update status. Please try again."
+      );
+      // Put the dropdown back on the last saved status.
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === orderId ? { ...order, status: order.savedStatus } : order
+        )
+      );
     } finally {
       setSavingId(null);
     }
@@ -560,7 +590,11 @@ function OrderManagement({ sender }) {
       );
       setReviewOrder(null);
     } catch (err) {
-      setError("Failed to accept order. Please try again.");
+      setError(
+        err.code === "payment-not-verified" || err.code === "permission-denied"
+          ? PAYMENT_REQUIRED_MESSAGE
+          : "Failed to accept order. Please try again."
+      );
     } finally {
       setSavingId(null);
     }
@@ -686,12 +720,23 @@ function OrderManagement({ sender }) {
                     <span className="ord-card__service">{summary}</span>
                     <span className="ord-card__date">{formatDate(order.createdAt)}</span>
                   </div>
-                  <span className={`order-status order-status--${order.status || "placed"}`}>
-                    {statusLabel(order.status)}
+                  <span className="ord-card__badges">
+                    <PaymentBadge status={order.paymentStatus} />
+                    <span className={`order-status order-status--${order.status || "placed"}`}>
+                      {statusLabel(order.status)}
+                    </span>
                   </span>
                 </div>
 
                 <div className="ord-card__customer">{order.customerEmail || "Unknown customer"}</div>
+
+                {isPlaced && getOrderPaymentStatus(order) !== "verified" && (
+                  <div className="ord-card__payment-hint">
+                    {getOrderPaymentStatus(order) === "pending"
+                      ? "Payment is awaiting verification. Printing is locked until it is verified."
+                      : "Waiting for full payment. Printing is locked until it is verified."}
+                  </div>
+                )}
 
                 {order.status === "needs_revision" && order.staffNote && (
                   <div className="ord-card__staff-note">
@@ -729,7 +774,7 @@ function OrderManagement({ sender }) {
                         onChange={(e) => handleStatusChange(order.id, e.target.value)}
                       >
                         {ORDER_STATUSES.filter((s) => s !== "cancelled" || order.status === "cancelled").map((s) => (
-                          <option key={s} value={s}>
+                          <option key={s} value={s} disabled={!canSetOrderStatus(order, s)}>
                             {statusLabel(s)}
                           </option>
                         ))}
@@ -809,6 +854,7 @@ function ReviewOrderModal({ order, saving, onClose, onAccept, onRequestRevision 
   const [revisionNote, setRevisionNote] = useState("");
   const [revisionError, setRevisionError] = useState("");
   const lines = getOrderLines(order);
+  const paymentVerified = getOrderPaymentStatus(order) === "verified";
 
   function handleSendRevision() {
     if (!revisionNote.trim()) {
@@ -897,6 +943,16 @@ function ReviewOrderModal({ order, saving, onClose, onAccept, onRequestRevision 
           </span>
         </label>
 
+        <div className="review-payment">
+          <span>Payment</span>
+          <PaymentBadge status={order.paymentStatus} />
+        </div>
+        {!paymentVerified && (
+          <p className="ord-card__payment-hint">
+            This order can't be accepted for printing until its full payment is verified.
+          </p>
+        )}
+
         {!showRevisionNote ? (
           <div className="review-actions">
             <button
@@ -910,7 +966,7 @@ function ReviewOrderModal({ order, saving, onClose, onAccept, onRequestRevision 
             <button
               type="button"
               className="login-btn order-submit-btn"
-              disabled={!confirmed || saving}
+              disabled={!confirmed || saving || !paymentVerified}
               onClick={onAccept}
             >
               {saving ? "Accepting..." : "Accept Order"}

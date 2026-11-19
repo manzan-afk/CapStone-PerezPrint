@@ -856,6 +856,14 @@
   color: #1e8a53;
 }
 
+.order-card__status-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .order-status--completed {
   background: #e6f0ff;
   color: #1d5fd6;

@@ -31,10 +31,31 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if signedIn();
 
-      allow write: if signedIn() &&
+      // Sign-up (see createUserProfile): users can only create their own profile as a customer.
+      allow create: if signedIn() &&
+        (
+          (
+            request.auth.uid == userId &&
+            request.resource.data.get("role", "customer") == "customer"
+          ) ||
+          userRole() == "admin"
+        );
+
+      // Users can edit their own profile but not their role; only admins change roles.
+      allow update: if signedIn() &&
+        (
+          userRole() == "admin" ||
+          (
+            request.auth.uid == userId &&
+            request.resource.data.get("role", "customer") ==
+              resource.data.get("role", "customer")
+          )
+        );
+
+      allow delete: if signedIn() &&
         (
           request.auth.uid == userId ||
-          isAdminOrStaff() && userRole() == "admin"
+          userRole() == "admin"
         );
     }
 
@@ -50,7 +71,39 @@ service cloud.firestore {
 
     // =========================
     // ORDERS
+    // Order status and payment status are independent. An order can only move to
+    // Printing / Ready / Picked Up once its payment is verified, and the payment
+    // status on an order can only change together with its payments document.
     // =========================
+    function orderIsPaid(data) {
+      return data.get("paymentStatus", "unpaid") in ["verified", "paid"];
+    }
+
+    function orderStatusAllowed() {
+      let oldStatus = resource.data.get("status", "placed");
+      let newStatus = request.resource.data.get("status", "placed");
+      return !(newStatus in ["printing", "ready", "completed"]) ||
+        newStatus == oldStatus ||
+        orderIsPaid(request.resource.data) ||
+        // Orders that were already past the gate before this rule existed.
+        (oldStatus in ["printing", "ready"] && newStatus != "printing");
+    }
+
+    function orderPaymentChangeAllowed(orderId) {
+      let paymentId = request.resource.data.get("paymentId", "");
+      return (
+        request.resource.data.get("paymentStatus", "unpaid") ==
+          resource.data.get("paymentStatus", "unpaid") &&
+        paymentId == resource.data.get("paymentId", "")
+      ) || (
+        paymentId is string &&
+        paymentId != "" &&
+        getAfter(/databases/$(database)/documents/payments/$(paymentId)).data.orderId == orderId &&
+        getAfter(/databases/$(database)/documents/payments/$(paymentId)).data.paymentStatus ==
+          request.resource.data.get("paymentStatus", "unpaid")
+      );
+    }
+
     match /orders/{orderId} {
       allow read: if signedIn() &&
         (
@@ -59,27 +112,69 @@ service cloud.firestore {
         );
 
       allow create: if signedIn() &&
-        request.resource.data.customerId == request.auth.uid;
+        request.resource.data.customerId == request.auth.uid &&
+        request.resource.data.get("status", "placed") == "placed" &&
+        request.resource.data.get("paymentStatus", "unpaid") == "unpaid";
 
-      allow update: if isAdminOrStaff() ||
+      allow update: if
+        (
+          isAdminOrStaff() &&
+          orderStatusAllowed() &&
+          orderPaymentChangeAllowed(orderId)
+        ) ||
+        // Customer cancels an unpaid order that staff haven't started.
         (
           signedIn() &&
           resource.data.customerId == request.auth.uid &&
           resource.data.get("status", "placed") == "placed" &&
+          resource.data.get("paymentStatus", "unpaid") in ["unpaid", "rejected"] &&
           request.resource.data.status == "cancelled" &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             "status",
             "statusUpdatedAt",
+            "updatedAt",
             "cancelledAt",
             "isArchived",
             "archivedAt"
           ])
+        ) ||
+        // Customer submits a payment: the order's payment status becomes "pending"
+        // in the same batch that creates the payments document.
+        (
+          signedIn() &&
+          resource.data.customerId == request.auth.uid &&
+          resource.data.get("status", "placed") != "cancelled" &&
+          resource.data.get("paymentStatus", "unpaid") in ["unpaid", "rejected"] &&
+          request.resource.data.paymentStatus == "pending" &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            "paymentStatus",
+            "paymentId",
+            "updatedAt"
+          ]) &&
+          getAfter(/databases/$(database)/documents/payments/$(request.resource.data.paymentId)).data.customerId == request.auth.uid &&
+          getAfter(/databases/$(database)/documents/payments/$(request.resource.data.paymentId)).data.orderId == orderId &&
+          getAfter(/databases/$(database)/documents/payments/$(request.resource.data.paymentId)).data.paymentStatus == "pending"
         );
     }
 
     // =========================
-    // PAYMENTS (manual GCash submissions, see paymentService.js)
+    // SETTINGS (settings/payment: shop GCash details, see paymentService.js)
     // =========================
+    match /settings/payment {
+      allow read: if signedIn();
+
+      allow write: if signedIn() &&
+        userRole() == "admin";
+    }
+
+    // =========================
+    // PAYMENTS (manual GCash submissions, see paymentService.js)
+    // Older documents used `status`; paymentStatus takes over once a payment is reviewed.
+    // =========================
+    function currentPaymentStatus() {
+      return resource.data.get("paymentStatus", resource.data.get("status", "pending"));
+    }
+
     match /payments/{paymentId} {
       allow read: if signedIn() &&
         (
@@ -89,9 +184,57 @@ service cloud.firestore {
 
       allow create: if signedIn() &&
         request.resource.data.customerId == request.auth.uid &&
-        request.resource.data.status == "pending";
+        request.resource.data.paymentId == paymentId &&
+        request.resource.data.paymentStatus == "pending" &&
+        request.resource.data.amount is number &&
+        request.resource.data.amount > 0 &&
+        request.resource.data.referenceNumber is string &&
+        request.resource.data.referenceNumber.size() > 0 &&
+        request.resource.data.orderId is string &&
+        get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.customerId == request.auth.uid &&
+        getAfter(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.paymentId == paymentId;
 
-      allow update: if isAdminOrStaff();
+      // Staff/admin review: verify (amount must equal the full order total),
+      // reject (with a reason) or refund. Only the matching review fields may change.
+      allow update: if isAdminOrStaff() &&
+        (
+          (
+            currentPaymentStatus() == "pending" &&
+            request.resource.data.paymentStatus == "verified" &&
+            request.resource.data.verifiedBy == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              "paymentStatus",
+              "verifiedBy",
+              "verifiedAt"
+            ]) &&
+            resource.data.amount ==
+              get(/databases/$(database)/documents/orders/$(resource.data.orderId)).data.totalPrice
+          ) ||
+          (
+            currentPaymentStatus() == "pending" &&
+            request.resource.data.paymentStatus == "rejected" &&
+            request.resource.data.rejectedBy == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              "paymentStatus",
+              "rejectedBy",
+              "rejectedAt",
+              "rejectionReason"
+            ]) &&
+            request.resource.data.rejectionReason is string &&
+            request.resource.data.rejectionReason.size() > 0 &&
+            request.resource.data.rejectionReason.size() <= 200
+          ) ||
+          (
+            currentPaymentStatus() == "verified" &&
+            request.resource.data.paymentStatus == "refunded" &&
+            request.resource.data.refundedBy == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              "paymentStatus",
+              "refundedBy",
+              "refundedAt"
+            ])
+          )
+        );
     }
 
     // =========================
