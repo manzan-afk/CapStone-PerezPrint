@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { getUserOrders, uploadOrderFiles } from "../services/ordersService";
+import { getAllServices } from "../services/servicesService";
 import {
   submitPayment,
   getCustomerPayments,
@@ -7,7 +8,7 @@ import {
   normalizeReference,
   PAYMENT_OPTIONS,
 } from "../services/paymentService";
-import { PAYMENT_STATUS_LABELS } from "../utils/orderStatus";
+import { PAYMENT_STATUS_LABELS, getOrderPaymentStatus } from "../utils/orderStatus";
 import "./CustomerPayments.css";
 
 const MAX_PROOF_BYTES = 5 * 1024 * 1024;
@@ -39,10 +40,102 @@ function formatPeso(value) {
   })}`;
 }
 
+// Image of the first service in the order (current items[] shape or the older single-service fields).
+function getOrderImage(order, services) {
+  const serviceId = order.items?.[0]?.serviceId || order.serviceId;
+  return services.find((service) => service.id === serviceId)?.imageUrl || "";
+}
+
+function getOrderTitle(order) {
+  const names = order.items?.length
+    ? order.items.map((item) => item.serviceName).filter(Boolean)
+    : [order.serviceName].filter(Boolean);
+  return names.length ? names.join(", ") : "Print order";
+}
+
+// Dropdown that shows each order's image; a native <select> can't render images.
+function OrderPicker({ id, orders, services, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const selected = orders.find((order) => order.id === value) || null;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  function choose(orderId) {
+    onChange(orderId);
+    setOpen(false);
+  }
+
+  function renderOrder(order) {
+    const imageUrl = getOrderImage(order, services);
+    return (
+      <>
+        {imageUrl ? (
+          <img className="cpay-picker__img" src={imageUrl} alt="" loading="lazy" />
+        ) : (
+          <span className="cpay-picker__img cpay-picker__img--empty" aria-hidden="true" />
+        )}
+        <span className="cpay-picker__text">
+          <strong>{order.referenceId || order.id}</strong>
+          <span>{getOrderTitle(order)}</span>
+        </span>
+        <span className="cpay-picker__price">{formatPeso(order.totalPrice)}</span>
+      </>
+    );
+  }
+
+  return (
+    <div
+      className="cpay-picker"
+      ref={rootRef}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") setOpen(false);
+      }}
+    >
+      <button
+        type="button"
+        id={id}
+        className="cpay-input cpay-picker__button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {selected ? renderOrder(selected) : <span className="cpay-picker__placeholder">Select an order</span>}
+        <span className="cpay-picker__caret" aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <ul className="cpay-picker__list" role="listbox" aria-labelledby={id}>
+          {orders.map((order) => (
+            <li key={order.id} role="presentation">
+              <button
+                type="button"
+                role="option"
+                aria-selected={order.id === value}
+                className={`cpay-picker__option${order.id === value ? " cpay-picker__option--active" : ""}`}
+                onClick={() => choose(order.id)}
+              >
+                {renderOrder(order)}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function CustomerPayments({ uid, email, customerName = "", initialOrderId = "" }) {
   const [orders, setOrders] = useState([]);
   const [payments, setPayments] = useState([]);
   const [paymentSettings, setPaymentSettings] = useState(null);
+  const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
@@ -80,7 +173,7 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
     setLoading(true);
     setLoadError("");
     try {
-      const [userOrders, userPayments, settings] = await Promise.all([
+      const [userOrders, userPayments, settings, allServices] = await Promise.all([
         getUserOrders(uid),
         getCustomerPayments(uid),
         // The shop details are optional; a failure here shouldn't hide the rest of the page.
@@ -88,7 +181,13 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
           console.error("Failed to load payment settings:", err);
           return null;
         }),
+        // Service images are optional too.
+        getAllServices().catch((err) => {
+          console.error("Failed to load service images:", err);
+          return [];
+        }),
       ]);
+      setServices(allServices);
       setOrders(userOrders);
       setPayments(userPayments);
       setPaymentSettings(settings);
@@ -104,17 +203,19 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
     }
   }
 
-  // Orders that can still be paid: priced, not cancelled, and without a pending or verified payment.
-  const blockedOrderIds = new Set(
+  // Orders that can still be paid: priced, not cancelled, and with no payment submitted yet
+  // (only unpaid orders, or ones whose last payment was rejected, can be paid).
+  const submittedOrderIds = new Set(
     payments
-      .filter((payment) => payment.paymentStatus === "pending" || payment.paymentStatus === "verified")
+      .filter((payment) => payment.paymentStatus !== "rejected")
       .map((payment) => payment.orderId)
   );
   const payableOrders = orders.filter(
     (order) =>
       order.status !== "cancelled" &&
       Number(order.totalPrice) > 0 &&
-      !blockedOrderIds.has(order.id)
+      ["unpaid", "rejected"].includes(getOrderPaymentStatus(order)) &&
+      !submittedOrderIds.has(order.id)
   );
   const selectedOrder = payableOrders.find((order) => order.id === orderId) || null;
 
@@ -132,8 +233,8 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
     selectedOrder && amountSent !== "" && sentValue > 0 &&
     Math.round(sentValue * 100) !== Math.round(Number(selectedOrder.totalPrice) * 100);
 
-  function handleOrderChange(event) {
-    setOrderId(event.target.value);
+  function handleOrderChange(nextId) {
+    setOrderId(nextId);
     setAmountEdit(null);
     setErrors((previous) => ({ ...previous, order: "", amount: "" }));
   }
@@ -310,19 +411,13 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
             <form className="cpay-form" onSubmit={handleSubmit} noValidate>
               <div className="cpay-field">
                 <label className="cpay-label" htmlFor="payOrder">Order</label>
-                <select
+                <OrderPicker
                   id="payOrder"
-                  className="cpay-input"
+                  orders={payableOrders}
+                  services={services}
                   value={orderId}
                   onChange={handleOrderChange}
-                >
-                  <option value="">Select an order</option>
-                  {payableOrders.map((order) => (
-                    <option key={order.id} value={order.id}>
-                      {order.referenceId || order.id} — {formatPeso(order.totalPrice)}
-                    </option>
-                  ))}
-                </select>
+                />
                 {errors.order && <span className="cpay-error">{errors.order}</span>}
               </div>
 

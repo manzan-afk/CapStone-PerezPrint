@@ -216,6 +216,107 @@
   box-shadow: 0 0 0 3px rgba(255, 138, 30, 0.18);
 }
 
+/* Order picker with service images */
+.cpay-picker {
+  position: relative;
+}
+
+.cpay-picker__button,
+.cpay-picker__option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cpay-picker__button {
+  padding-right: 32px;
+  position: relative;
+}
+
+.cpay-picker__placeholder {
+  color: #8a93a3;
+}
+
+.cpay-picker__caret {
+  position: absolute;
+  right: 12px;
+  color: #8a93a3;
+}
+
+.cpay-picker__img {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #f1f3f6;
+}
+
+.cpay-picker__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  font-size: 12.5px;
+  color: #6b7486;
+}
+
+.cpay-picker__text strong {
+  font-size: 13.5px;
+  color: #1b2436;
+}
+
+.cpay-picker__text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cpay-picker__price {
+  flex: none;
+  font-weight: 600;
+  font-size: 13px;
+  color: #1b2436;
+}
+
+.cpay-picker__list {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #e2e5ea;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(27, 36, 54, 0.14);
+}
+
+.cpay-picker__option {
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+}
+
+.cpay-picker__option:hover,
+.cpay-picker__option:focus-visible {
+  outline: none;
+  background: #fff4e8;
+}
+
+.cpay-picker__option--active {
+  background: #ffeedb;
+}
+
 .cpay-error {
   font-size: 12px;
   color: #e5484d;
