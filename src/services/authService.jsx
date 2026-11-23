@@ -78,6 +78,21 @@ export function friendlyAuthError(code) {
       return "Too many attempts. Try again later.";
     case "auth/network-request-failed":
       return "Network error. Check your connection.";
+    case "auth/popup-closed-by-user":
+    case "auth/cancelled-popup-request":
+      return "Google sign-in was cancelled. Please try again.";
+    case "auth/popup-blocked":
+      return "Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again.";
+    case "auth/unauthorized-domain":
+      return "This website address isn't authorized for Google sign-in. Please contact the shop.";
+    case "auth/operation-not-allowed":
+      return "Google sign-in is not enabled for this shop yet. Please contact the shop.";
+    case "auth/account-exists-with-different-credential":
+      return "An account with this email already exists. Sign in with your email and password instead.";
+    case "auth/user-disabled":
+      return "Your account has been deactivated. Please contact the administrator.";
+    case "permission-denied":
+      return "Signed in, but your profile couldn't be loaded (permission denied). Please contact the shop.";
     default:
       return "Something went wrong. Please try again.";
   }

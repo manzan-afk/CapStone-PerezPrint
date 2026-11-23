@@ -350,6 +350,7 @@ export default function CreateAccount() {
       // First-time Google users finish their profile (name, phone, privacy consent) first.
       navigate(existingProfile ? getRedirectPath(existingProfile.role) : "/complete-registration");
     } catch (err) {
+      console.error("Google sign-up failed:", err.code, err);
       setStatus({ text: friendlyAuthError(err.code), type: "error" });
     } finally {
       setGoogleLoading(false);

@@ -416,6 +416,30 @@ export default function AdminDashboard() {
         uid={user?.uid}
         open={notificationModalOpen}
         onClose={() => setNotificationModalOpen(false)}
+        onNavigate={setView}
+        attention={[
+          {
+            key: "orders",
+            view: "orders",
+            count: orderCounts.ordersNeedingAction,
+            label: "New orders to review",
+            description: "Placed orders waiting to be started.",
+          },
+          {
+            key: "payments",
+            view: "payments",
+            count: pendingPayments,
+            label: "Payments to verify",
+            description: "GCash receipts waiting for review.",
+          },
+          {
+            key: "pickup",
+            view: "pickup",
+            count: orderCounts.readyPickups,
+            label: "Ready for pickup",
+            description: "Orders customers can collect at the shop.",
+          },
+        ]}
       />
     </div>
   );

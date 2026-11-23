@@ -374,6 +374,7 @@ export default function Login() {
 
       navigate(profile ? getRedirectPath(profile.role) : "/complete-registration");
     } catch (err) {
+      console.error("Google sign-in failed:", err.code, err);
       setStatus({ text: friendlyAuthError(err.code), type: "error" });
     } finally {
       setGoogleLoading(false);

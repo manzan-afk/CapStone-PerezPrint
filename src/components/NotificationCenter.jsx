@@ -18,7 +18,7 @@ function formatTimestamp(value) {
   });
 }
 
-export default function NotificationCenter({ uid, open, onClose }) {
+export default function NotificationCenter({ uid, open, onClose, attention = [], onNavigate }) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -64,6 +64,8 @@ export default function NotificationCenter({ uid, open, onClose }) {
     }
   }
 
+  const pendingAttention = attention.filter((item) => item.count > 0);
+
   return (
     <div className="notification-modal-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
@@ -80,10 +82,38 @@ export default function NotificationCenter({ uid, open, onClose }) {
         </header>
 
         <div className="notification-modal__body" aria-live="polite">
+          {pendingAttention.length > 0 && (
+            <section className="notification-attention" aria-label="Needs your attention">
+              <h3 className="notification-attention__title">Needs your attention</h3>
+              {pendingAttention.map((item) => (
+                <button
+                  type="button"
+                  key={item.key}
+                  className="notification-attention__item"
+                  onClick={() => {
+                    onNavigate?.(item.view);
+                    onClose();
+                  }}
+                >
+                  <span className="notification-attention__count">{item.count}</span>
+                  <span className="notification-attention__text">
+                    <strong>{item.label}</strong>
+                    <span>{item.description}</span>
+                  </span>
+                  <span className="notification-attention__go" aria-hidden="true">→</span>
+                </button>
+              ))}
+            </section>
+          )}
+
           {loading && <div className="notification-modal__state">Loading notifications...</div>}
           {!loading && error && <div className="notification-modal__state notification-modal__state--error">{error}</div>}
           {!loading && !error && notifications.length === 0 && (
-            <div className="notification-modal__state">No notifications yet.</div>
+            <div className="notification-modal__state">
+              {pendingAttention.length > 0
+                ? "No other notifications yet."
+                : "You're all caught up. New orders, payments and updates will appear here."}
+            </div>
           )}
 
           {!loading && notifications.map((item) => (
