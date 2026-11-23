@@ -269,5 +269,43 @@ service cloud.firestore {
       allow delete: if signedIn() &&
         userRole() == "admin";
     }
+
+    // =========================
+    // NOTIFICATIONS
+    // Each notification belongs to one recipient. Recipients control read
+    // state and deletion; authenticated users may create notifications only
+    // with themselves as the sender.
+    // =========================
+    match /notifications/{notificationId} {
+      allow read: if signedIn() &&
+        resource.data.recipientId == request.auth.uid;
+
+      allow create: if signedIn() &&
+        request.resource.data.recipientId is string &&
+        request.resource.data.recipientId.size() > 0 &&
+        (
+          request.resource.data.senderId == request.auth.uid ||
+          request.resource.data.senderId == ""
+        ) &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() > 0 &&
+        request.resource.data.title.size() <= 120 &&
+        request.resource.data.message is string &&
+        request.resource.data.message.size() > 0 &&
+        request.resource.data.message.size() <= 1000 &&
+        request.resource.data.read == false &&
+        exists(/databases/$(database)/documents/users/$(request.resource.data.recipientId));
+
+      allow update: if signedIn() &&
+        resource.data.recipientId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "read",
+          "readAt"
+        ]) &&
+        request.resource.data.read is bool;
+
+      allow delete: if signedIn() &&
+        resource.data.recipientId == request.auth.uid;
+    }
   }
 }

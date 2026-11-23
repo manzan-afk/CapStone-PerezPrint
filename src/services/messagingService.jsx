@@ -10,6 +10,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase-config";
 import { lineOptionsSuffix } from "../utils/orderLines";
+import { createNotification } from "./notificationService";
 
 export function getConversationId(firstUid, secondUid) {
   return [firstUid, secondUid]
@@ -201,6 +202,14 @@ export async function sendDirectMessage({
     readAt: null,
     createdAt: serverTimestamp(),
   });
+  createNotification({
+    recipientId: recipient.id,
+    senderId: sender.id,
+    senderName: sender.name,
+    title: "New direct message",
+    message: trimmedText || "You received a file attachment.",
+    type: "message",
+  }).catch(console.error);
 }
 
 // Tells a customer the outcome of their payment review ("verified" or "rejected").

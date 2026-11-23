@@ -19,6 +19,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase-config";
 import { canSetOrderStatus, getOrderPaymentStatus, PAYMENT_REQUIRED_MESSAGE } from "../utils/orderStatus";
+import { createNotification, notifyUserRole } from "./notificationService";
 
 function mapVisibleOrders(snapshot) {
   return snapshot.docs
@@ -94,6 +95,31 @@ export async function createOrder(data) {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+  createNotification({
+    recipientId: data.customerId,
+    title: "Order placed",
+    message: `Your order ${referenceId} was received.`,
+    type: "order",
+    orderId: docRef.id,
+  }).catch(console.error);
+  notifyUserRole({
+    role: "staff",
+    senderId: data.customerId,
+    senderName: data.customerName || "",
+    title: "New order placed",
+    message: `Order ${referenceId} is waiting for review.`,
+    type: "order",
+    orderId: docRef.id,
+  }).catch(console.error);
+  notifyUserRole({
+    role: "admin",
+    senderId: data.customerId,
+    senderName: data.customerName || "",
+    title: "New order placed",
+    message: `Order ${referenceId} is waiting for review.`,
+    type: "order",
+    orderId: docRef.id,
+  }).catch(console.error);
   return { id: docRef.id, referenceId };
 }
 
@@ -181,6 +207,16 @@ export function updateOrderStatus(orderId, status) {
       throw error;
     }
     transaction.update(orderRef, updates);
+    createNotification({
+      recipientId: snapshot.data().customerId,
+      senderId: "", 
+      title: `Order ${status.replaceAll("_", " ")}`,
+      message: status === "ready"
+        ? `Order ${snapshot.data().referenceId || ""} is ready for pickup.`
+        : `Order ${snapshot.data().referenceId || ""} status changed to ${status.replaceAll("_", " ")}.`,
+      type: "order",
+      orderId,
+    }).catch(console.error);
   });
 }
 
@@ -226,12 +262,24 @@ export function cancelOrder(orderId) {
  * @returns {Promise<void>}
  */
 export function requestOrderRevision(orderId, note) {
-  return updateDoc(doc(db, "orders", orderId), {
-    status: "needs_revision",
-    staffNote: note,
-    statusUpdatedAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    revisionRequestedAt: serverTimestamp(),
+  const orderRef = doc(db, "orders", orderId);
+  return runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(orderRef);
+    if (!snapshot.exists()) throw new Error("This order no longer exists.");
+    transaction.update(orderRef, {
+      status: "needs_revision",
+      staffNote: note,
+      statusUpdatedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      revisionRequestedAt: serverTimestamp(),
+    });
+    createNotification({
+      recipientId: snapshot.data().customerId,
+      title: "Order needs revision",
+      message: note,
+      type: "revision",
+      orderId,
+    }).catch(console.error);
   });
 }
 

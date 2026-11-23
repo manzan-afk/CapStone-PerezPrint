@@ -1,5 +1,14 @@
 {
   "projects": {
     "default": "capstone-projectwtms"
+  },
+  "targets": {
+    "capstone-projectwtms": {
+      "hosting": {
+        "perez-printing-shop": [
+          "perez-printing-shop"
+        ]
+      }
+    }
   }
 }

@@ -20,6 +20,8 @@ import DirectMessages from "../components/DirectMessages";
 import PrintableReceipt from "../components/PrintableReceipt";
 import UnreadMessageBadge from "../components/UnreadMessageBadge";
 import SidebarCountBadge from "../components/SidebarCountBadge";
+import NotificationBadge from "../components/NotificationBadge";
+import NotificationCenter from "../components/NotificationCenter";
 import useSidebarOrderCounts from "../hooks/useSidebarOrderCounts";
 import ProfileInfo from "../components/ProfileInfo";
 import PickupOrders from "../components/PickupOrders";
@@ -41,6 +43,7 @@ export default function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [view, setView] = useState("dashboard");
   const [profileImageFailed, setProfileImageFailed] = useState(false);
+  const [notificationModalOpen, setNotificationModalOpen] = useState(false);
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
   const orderCounts = useSidebarOrderCounts(user?.uid, "admin");
@@ -233,6 +236,25 @@ export default function AdminDashboard() {
 
           <a
             href="#"
+            className="nav-item"
+            onClick={(event) => {
+              event.preventDefault();
+              setNotificationModalOpen(true);
+              setSidebarOpen(false);
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20">
+              <path
+                fill="currentColor"
+                d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2Zm6-6v-5a6 6 0 0 0-4-5.65V4a2 2 0 0 0-4 0v1.35A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2Z"
+              />
+            </svg>
+            Notifications
+            <NotificationBadge uid={user?.uid} />
+          </a>
+
+          <a
+            href="#"
             className={`nav-item ${view === "messages" ? "nav-item--active" : ""}`}
             onClick={(e) => {
               e.preventDefault();
@@ -378,6 +400,11 @@ export default function AdminDashboard() {
           />
         )}
       </main>
+      <NotificationCenter
+        uid={user?.uid}
+        open={notificationModalOpen}
+        onClose={() => setNotificationModalOpen(false)}
+      />
     </div>
   );
 }

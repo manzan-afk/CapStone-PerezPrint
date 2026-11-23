@@ -4,6 +4,8 @@ import { useAuth } from "../context/AuthContext";
 import DirectMessages from "../components/DirectMessages";
 import UnreadMessageBadge from "../components/UnreadMessageBadge";
 import SidebarCountBadge from "../components/SidebarCountBadge";
+import NotificationBadge from "../components/NotificationBadge";
+import NotificationCenter from "../components/NotificationCenter";
 import useSidebarOrderCounts from "../hooks/useSidebarOrderCounts";
 import { markOrderNotificationsViewed } from "../services/userServices";
 import { getAllServices } from "../services/servicesService";
@@ -31,6 +33,7 @@ export default function CustomerDashboard() {
   const [view, setView] = useState("dashboard"); // "dashboard" | "services" | "orders" | ...
   const [payOrderId, setPayOrderId] = useState("");
   const [profileImageFailed, setProfileImageFailed] = useState(false);
+  const [notificationModalOpen, setNotificationModalOpen] = useState(false);
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
   const orderCounts = useSidebarOrderCounts(user?.uid, "customer");
@@ -158,8 +161,12 @@ export default function CustomerDashboard() {
               className={`nav-item ${view === item.key ? "nav-item--active" : ""}`}
               onClick={(e) => {
                 e.preventDefault();
-                setView(item.key);
                 setSidebarOpen(false);
+                if (item.key === "notifications") {
+                  setNotificationModalOpen(true);
+                } else {
+                  setView(item.key);
+                }
                 if (item.key === "notifications" && user?.uid) {
                   markOrderNotificationsViewed(user.uid).catch((error) => {
                     console.error("Failed to mark order notifications as viewed:", error);
@@ -178,10 +185,7 @@ export default function CustomerDashboard() {
                 <SidebarCountBadge count={orderCounts.readyPickups} label="ready pickups" />
               )}
               {item.key === "notifications" && (
-                <SidebarCountBadge
-                  count={orderCounts.unreadOrderNotifications}
-                  label="unread order notifications"
-                />
+                <NotificationBadge uid={user?.uid} />
               )}
               {item.key === "messages" && <UnreadMessageBadge uid={user?.uid} />}
             </a>
@@ -323,6 +327,11 @@ export default function CustomerDashboard() {
           </div>
         )}
       </main>
+      <NotificationCenter
+        uid={user?.uid}
+        open={notificationModalOpen}
+        onClose={() => setNotificationModalOpen(false)}
+      />
     </div>
   );
 }

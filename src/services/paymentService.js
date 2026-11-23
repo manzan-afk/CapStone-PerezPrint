@@ -16,6 +16,7 @@ import {
 import { db } from "../firebase-config";
 import { normalizePaymentStatus } from "../utils/orderStatus";
 import { uploadServiceImage } from "./servicesService";
+import { createNotification, notifyUserRole } from "./notificationService";
 
 const PAYMENT_SETTINGS_REF = () => doc(db, "settings", "payment");
 
@@ -125,7 +126,42 @@ export async function submitPayment(data) {
     updatedAt: serverTimestamp(),
   });
 
+console.log("PAYMENT SUBMISSION DEBUG:", {
+  orderId: data.orderId,
+  customerId: data.customerId,
+  orderAmount: data.orderAmount,
+  amount: Number(data.amount),
+  referenceNumber: normalizeReference(data.referenceNumber),
+  receiptUrl: data.receiptUrl,
+  paymentStatus: "pending",
+});
+
   await batch.commit();
+  createNotification({
+    recipientId: data.customerId,
+    title: "Payment submitted",
+    message: `Payment for order ${data.orderReference || data.orderId} is waiting for review.`,
+    type: "payment",
+    orderId: data.orderId,
+  }).catch(console.error);
+  notifyUserRole({
+    role: "staff",
+    senderId: data.customerId,
+    senderName: data.customerName || "",
+    title: "Payment needs review",
+    message: `A GCash payment was submitted for order ${data.orderReference || data.orderId}.`,
+    type: "payment",
+    orderId: data.orderId,
+  }).catch(console.error);
+  notifyUserRole({
+    role: "admin",
+    senderId: data.customerId,
+    senderName: data.customerName || "",
+    title: "Payment needs review",
+    message: `A GCash payment was submitted for order ${data.orderReference || data.orderId}.`,
+    type: "payment",
+    orderId: data.orderId,
+  }).catch(console.error);
   return paymentRef.id;
 }
 
@@ -252,6 +288,25 @@ export async function updatePaymentStatus(paymentId, status, { reviewerId, reaso
       updatedAt: serverTimestamp(),
       ...(status === "verified" ? { paidAt: serverTimestamp() } : {}),
     });
+    const paymentTitle = status === "verified"
+      ? "Payment verified"
+      : status === "rejected"
+      ? "Payment rejected"
+      : "Payment refunded";
+    const paymentMessage = status === "verified"
+      ? `Your payment for order ${payment.orderReference || payment.orderId} was verified.`
+      : status === "rejected"
+      ? `Your payment for order ${payment.orderReference || payment.orderId} was rejected.${trimmedReason ? ` Reason: ${trimmedReason}` : ""}`
+      : `Your payment for order ${payment.orderReference || payment.orderId} was refunded.`;
+    createNotification({
+      recipientId: payment.customerId,
+      senderId: reviewerId,
+      title: paymentTitle,
+      message: paymentMessage,
+      type: "payment",
+      orderId: payment.orderId,
+      paymentId,
+    }).catch(console.error);
   });
 }
 
