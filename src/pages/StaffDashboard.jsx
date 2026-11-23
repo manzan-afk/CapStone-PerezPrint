@@ -29,6 +29,9 @@ import { canSetOrderStatus, getOrderPaymentStatus, PAYMENT_REQUIRED_MESSAGE } fr
 import usePendingPaymentCount from "../hooks/usePendingPaymentCount";
 import { matchesStatusTab } from "../utils/orderStatus";
 import "./StaffDashboard.css";
+import ConfirmModal from "../components/ConfirmModal";
+import SalesOrderChart from "../components/SalesOrderChart";
+import ServiceRevenueChart from "../components/ServiceRevenueChart";
 import { lineOptionsSuffix } from "../utils/orderLines";
 
 const ORDER_STATUSES = ["placed", "printing", "ready", "completed", "needs_revision", "cancelled"];
@@ -58,6 +61,7 @@ export default function StaffDashboard() {
   const [profileImageFailed, setProfileImageFailed] = useState(false);
   const [notificationModalOpen, setNotificationModalOpen] = useState(false);
   const navigate = useNavigate();
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const { logout, user, profile } = useAuth();
   const orderCounts = useSidebarOrderCounts(user?.uid, "staff");
   const pendingPayments = usePendingPaymentCount(Boolean(user?.uid));
@@ -147,6 +151,14 @@ export default function StaffDashboard() {
 
   return (
     <div className="dashboard-layout dashboard-layout--pro">
+      <ConfirmModal
+        open={logoutConfirmOpen}
+        title="Confirm Logout"
+        message="Are you sure you want to log out of your account?"
+        confirmLabel="Log out"
+        onConfirm={handleLogout}
+        onCancel={() => setLogoutConfirmOpen(false)}
+      />
       {/* Mobile top bar */}
       <div className="mobile-topbar">
         <button
@@ -256,7 +268,7 @@ export default function StaffDashboard() {
             </div>
           </button>
 
-          <button className="logout-btn" onClick={handleLogout}>
+          <button className="logout-btn" onClick={() => setLogoutConfirmOpen(true)}>
             <svg viewBox="0 0 24 24" width="18" height="18">
               <path
                 fill="currentColor"
@@ -1162,12 +1174,18 @@ function SalesManagement() {
         </div>
       </div>
 
+      <div className="report-sales-chart">
+        <SalesOrderChart orders={orders} loading={loading} error={error} />
+      </div>
+
       <div className="report-grid">
         <section className="report-panel">
           <h3 className="dashboard-section__title">Service Performance</h3>
           {serviceRows.length === 0 ? (
             <div className="um-empty">No services available.</div>
           ) : (
+            <>
+            <ServiceRevenueChart rows={serviceRows} />
             <div className="um-table-wrap report-table-wrap">
               <table className="um-table">
                 <thead>
@@ -1188,6 +1206,7 @@ function SalesManagement() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </section>
       </div>

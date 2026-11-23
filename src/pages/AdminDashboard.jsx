@@ -31,6 +31,9 @@ import OrderStatusTabs from "../components/OrderStatusTabs";
 import PaymentSettings from "../components/PaymentSettings";
 import PaymentVerification from "../components/PaymentVerification";
 import PaymentBadge from "../components/PaymentBadge";
+import ConfirmModal from "../components/ConfirmModal";
+import SalesOrderChart from "../components/SalesOrderChart";
+import ServiceRevenueChart from "../components/ServiceRevenueChart";
 import { canSetOrderStatus, getOrderPaymentStatus, PAYMENT_REQUIRED_MESSAGE } from "../utils/orderStatus";
 import usePendingPaymentCount from "../hooks/usePendingPaymentCount";
 import { matchesStatusTab } from "../utils/orderStatus";
@@ -44,6 +47,7 @@ export default function AdminDashboard() {
   const [view, setView] = useState("dashboard");
   const [profileImageFailed, setProfileImageFailed] = useState(false);
   const [notificationModalOpen, setNotificationModalOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const navigate = useNavigate();
   const { logout, user, profile } = useAuth();
   const orderCounts = useSidebarOrderCounts(user?.uid, "admin");
@@ -56,6 +60,14 @@ export default function AdminDashboard() {
 
   return (
     <div className="dashboard-layout dashboard-layout--pro">
+      <ConfirmModal
+        open={logoutConfirmOpen}
+        title="Confirm Logout"
+        message="Are you sure you want to log out of your account?"
+        confirmLabel="Log out"
+        onConfirm={handleLogout}
+        onCancel={() => setLogoutConfirmOpen(false)}
+      />
       {/* Mobile top bar */}
       <div className="mobile-topbar">
         <button
@@ -317,7 +329,7 @@ export default function AdminDashboard() {
             </div>
           </button>
 
-          <button className="logout-btn" onClick={handleLogout}>
+          <button className="logout-btn" onClick={() => setLogoutConfirmOpen(true)}>
             <svg viewBox="0 0 24 24" width="18" height="18">
               <path
                 fill="currentColor"
@@ -789,12 +801,18 @@ function SalesManagement() {
         </div>
       </div>
 
+      <div className="report-sales-chart">
+        <SalesOrderChart orders={orders} loading={loading} error={error} />
+      </div>
+
       <div className="report-grid">
         <section className="report-panel">
           <h3 className="dashboard-section__title">Service Performance</h3>
           {serviceRows.length === 0 ? (
             <div className="um-empty">No services available.</div>
           ) : (
+            <>
+            <ServiceRevenueChart rows={serviceRows} />
             <div className="um-table-wrap report-table-wrap">
               <table className="um-table">
                 <thead>
@@ -815,6 +833,7 @@ function SalesManagement() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </section>
       </div>
@@ -1163,6 +1182,7 @@ function ServicesManagement() {
   const [modalService, setModalService] = useState(null); // null = closed, {} = add, {...} = edit
   const [newServiceCategory, setNewServiceCategory] = useState("");
   const [deletingId, setDeletingId] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   useEffect(() => {
     loadServices();
@@ -1248,12 +1268,6 @@ function ServicesManagement() {
     const categoryServices = services.filter(
       (service) => service.category?.trim() === category.name,
     );
-    const serviceCount = categoryServices.length;
-    const serviceMessage = serviceCount
-      ? ` Its ${serviceCount} ${serviceCount === 1 ? "service will" : "services will"} remain in the catalog but become uncategorized.`
-      : "";
-    if (!window.confirm(`Delete the ${category.name} category?${serviceMessage}`)) return;
-
     setDeletingCategory(category.name);
     setError("");
     try {
@@ -1271,6 +1285,32 @@ function ServicesManagement() {
     } finally {
       setDeletingCategory(null);
     }
+  }
+
+  async function handleConfirmDelete() {
+    const target = pendingDelete;
+    setPendingDelete(null);
+    if (!target) return;
+    if (target.type === "service") await handleDelete(target.id);
+    else await handleDeleteCategory({ name: target.name });
+  }
+
+  function getPendingDeleteCopy() {
+    if (pendingDelete?.type === "service") {
+      return {
+        title: `Delete "${pendingDelete.name}"?`,
+        message: "This service will be removed from the catalog. This cannot be undone.",
+      };
+    }
+    const serviceCount = services.filter(
+      (service) => service.category?.trim() === pendingDelete?.name,
+    ).length;
+    return {
+      title: `Delete "${pendingDelete?.name}" category?`,
+      message: serviceCount
+        ? `Its ${serviceCount} ${serviceCount === 1 ? "service will" : "services will"} remain in the catalog but become uncategorized.`
+        : "This category will be removed.",
+    };
   }
 
   const categories = [...new Set([
@@ -1307,6 +1347,16 @@ function ServicesManagement() {
 
   return (
     <div className="dashboard-content">
+      {pendingDelete && (
+        <ConfirmModal
+          open
+          variant="danger"
+          {...getPendingDeleteCopy()}
+          confirmLabel="Delete"
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
       {error && <div className="um-error">{error}</div>}
 
       <div className="svc-toolbar">
@@ -1409,7 +1459,7 @@ function ServicesManagement() {
                   <button
                     type="button"
                     className="svc-category-delete"
-                    onClick={() => handleDeleteCategory({ name: group.name })}
+                    onClick={() => setPendingDelete({ type: "category", name: group.name })}
                     disabled={deletingCategory === group.name}
                     aria-label={`Delete ${group.name} category`}
                   >
@@ -1457,7 +1507,7 @@ function ServicesManagement() {
                           <button
                             type="button"
                             className="svc-delete-btn"
-                            onClick={() => handleDelete(svc.id)}
+                            onClick={() => setPendingDelete({ type: "service", id: svc.id, name: svc.name })}
                             disabled={deletingId === svc.id}
                           >
                             {deletingId === svc.id ? "Deleting..." : "Delete"}
@@ -2130,6 +2180,7 @@ function OrderManagement({ sender }) {
   const [savingId, setSavingId] = useState(null);
   const [savedId, setSavedId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [orderToDelete, setOrderToDelete] = useState(null);
   const [receiptOrder, setReceiptOrder] = useState(null);
   const [detailsOrder, setDetailsOrder] = useState(null);
 
@@ -2222,10 +2273,7 @@ function OrderManagement({ sender }) {
 
   async function handleDeleteOrder(order) {
     if (order.status !== "completed") return;
-    const confirmed = window.confirm(
-      `Delete the picked up order${order.referenceId ? ` ${order.referenceId}` : ""}? This cannot be undone.`
-    );
-    if (!confirmed) return;
+    setOrderToDelete(null);
 
     setDeletingId(order.id);
     setError("");
@@ -2278,6 +2326,17 @@ function OrderManagement({ sender }) {
 
   return (
     <div className="dashboard-content">
+      {orderToDelete && (
+        <ConfirmModal
+          open
+          variant="danger"
+          title="Delete picked up order?"
+          message={`Delete the picked up order${orderToDelete.referenceId ? ` ${orderToDelete.referenceId}` : ""}? This cannot be undone.`}
+          confirmLabel="Delete"
+          onConfirm={() => handleDeleteOrder(orderToDelete)}
+          onCancel={() => setOrderToDelete(null)}
+        />
+      )}
       {error && <div className="um-error">{error}</div>}
 
       <OrderStatusTabs orders={orders} active={statusFilter} onChange={setStatusFilter} />
@@ -2401,7 +2460,7 @@ function OrderManagement({ sender }) {
                   <button
                     type="button"
                     className="ord-delete-btn"
-                    onClick={() => handleDeleteOrder(order)}
+                    onClick={() => setOrderToDelete(order)}
                     disabled={deletingId === order.id}
                   >
                     {deletingId === order.id ? "Deleting..." : "Delete"}

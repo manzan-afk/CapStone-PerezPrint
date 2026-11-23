@@ -1,12 +1,39 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { createUserProfile } from "../services/userServices";
-import "./Login.css";
+import useTheme from "../hooks/useTheme";
+import ThemeToggle from "../components/ThemeToggle";
+import "./CreateAccount.css";
+
+const NAME_PATTERN = /^[A-Za-zÀ-ÖØ-öø-ÿ\s'-]+$/;
+const PHONE_PATTERN = /^[0-9+\-\s()]{7,20}$/;
+
+function validateName(value, label) {
+  const trimmed = value.trim();
+  if (!trimmed) return `${label} is required.`;
+  if (trimmed.length < 2) return `${label} must be at least 2 characters.`;
+  if (!NAME_PATTERN.test(trimmed)) {
+    return `${label} can only contain letters, spaces, hyphens, or apostrophes.`;
+  }
+  return "";
+}
+
+const iconProps = {
+  viewBox: "0 0 24 24",
+  width: "17",
+  height: "17",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: "2",
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+};
 
 export default function CompleteRegistration() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
+  const [theme, toggleTheme] = useTheme();
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -19,58 +46,56 @@ export default function CompleteRegistration() {
   const [privacyError, setPrivacyError] = useState("");
 
   const [status, setStatus] = useState({ text: "", type: "" });
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const redirectTimer = useRef(null);
+
+  useEffect(() => () => clearTimeout(redirectTimer.current), []);
+
+  useEffect(() => {
+    if (!leaveModalOpen) return undefined;
+    function handleKeyDown(e) {
+      if (e.key === "Escape") setLeaveModalOpen(false);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [leaveModalOpen]);
 
   // Not signed in at all — nothing to complete registration for.
   if (!authLoading && !user) {
-    navigate("/", { replace: true });
-    return null;
+    return <Navigate to="/" replace />;
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setFirstNameError("");
-    setLastNameError("");
-    setPhoneError("");
-    setPrivacyError("");
     setStatus({ text: "", type: "" });
 
-    let valid = true;
-    const trimmedFirstName = firstName.trim();
-    const trimmedLastName = lastName.trim();
+    const firstError = validateName(firstName, "First name");
+    const lastError = validateName(lastName, "Last name");
     const trimmedPhone = phone.trim();
-
-    if (!trimmedFirstName) {
-      setFirstNameError("First name is required.");
-      valid = false;
-    }
-
-    if (!trimmedLastName) {
-      setLastNameError("Last name is required.");
-      valid = false;
-    }
-
+    let phoneValidation = "";
     if (!trimmedPhone) {
-      setPhoneError("Phone number is required for SMS notifications.");
-      valid = false;
-    } else if (!/^[0-9+\-\s()]{7,20}$/.test(trimmedPhone)) {
-      setPhoneError("Enter a valid phone number.");
-      valid = false;
+      phoneValidation = "Phone number is required for SMS notifications.";
+    } else if (!PHONE_PATTERN.test(trimmedPhone)) {
+      phoneValidation = "Please enter a valid phone number (e.g., 09XX XXX XXXX).";
     }
+    const privacyValidation = agreedToPrivacy
+      ? ""
+      : "You must agree to the Data Privacy Policy to continue.";
 
-    if (!agreedToPrivacy) {
-      setPrivacyError("You must agree to the Data Privacy Policy to continue.");
-      valid = false;
-    }
+    setFirstNameError(firstError);
+    setLastNameError(lastError);
+    setPhoneError(phoneValidation);
+    setPrivacyError(privacyValidation);
+    if (firstError || lastError || phoneValidation || privacyValidation) return;
 
-    if (!valid) return;
-
-    setLoading(true);
+    setSaving(true);
     try {
       await createUserProfile(user.uid, {
         email: user.email,
-        firstName: trimmedFirstName,
-        lastName: trimmedLastName,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
         phone: trimmedPhone,
         role: "customer",
         provider: "google",
@@ -78,153 +103,209 @@ export default function CompleteRegistration() {
         agreedToPrivacyPolicyAt: new Date().toISOString(),
       });
 
-      setStatus({ text: "Registration complete.", type: "success" });
-      navigate("/dashboard");
-    } catch (err) {
+      setDone(true);
+      setStatus({ text: "Registration complete! Redirecting to your dashboard...", type: "success" });
+      redirectTimer.current = setTimeout(() => navigate("/dashboard"), 1500);
+    } catch {
       setStatus({ text: "Something went wrong. Please try again.", type: "error" });
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
   return (
-    <div className="login-page">
-      <div className="login-shell">
-        {/* Left: feature / brand panel */}
-        <div className="brand-panel">
-          <div className="brand-panel__top">
-            <img src="/logo.png" alt="Perez Printing Shop logo" className="brand-panel__logo" />
-            <div>
-              <h2 className="brand-panel__title">PEREZ</h2>
-              <p className="brand-panel__subtitle">Printing Shop</p>
-            </div>
-          </div>
-
-          <div className="brand-panel__body">
-            <h3 className="brand-panel__heading">Almost there</h3>
-            <p className="brand-panel__lead">
-              Just a few details to finish setting up your account.
-            </p>
-
-            <ul className="brand-panel__features">
-              <li>
-                <span className="brand-panel__feature-icon">✓</span>
-                Signed in securely with Google
-              </li>
-              <li>
-                <span className="brand-panel__feature-icon">✓</span>
-                Takes less than a minute
-              </li>
-            </ul>
-          </div>
-
-          <p className="brand-panel__footer">
-            © {new Date().getFullYear()} Perez Printing Shop
-          </p>
-        </div>
-
-        {/* Right: registration form */}
-        <div className="login-panel">
-          <div className="login-panel__inner">
-            <h1 className="login-panel__title">Complete Registration</h1>
-            <p className="login-panel__subtitle">
-              Just a few more details to finish setting up your account
-            </p>
-
-            <form onSubmit={handleSubmit} noValidate className="login-form">
-            {/* Email — locked in from the Google account, read-only */}
-            <div className="input-group">
-              <span className="input-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="20" height="20">
-                  <path
-                    fill="currentColor"
-                    d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5Z"
-                  />
-                </svg>
-              </span>
-              <input type="email" value={user?.email || ""} readOnly disabled />
-            </div>
-            <div className="field-hint">Signed in with Google — this email can't be changed here.</div>
-
-            <label className="field-label" htmlFor="firstName">First Name</label>
-            <div className="input-group">
-              <input
-                id="firstName"
-                type="text"
-                placeholder="First Name"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                style={{ paddingLeft: 14 }}
-              />
-            </div>
-            <div className="field-error">{firstNameError}</div>
-
-            <label className="field-label" htmlFor="lastName">Last Name</label>
-            <div className="input-group">
-              <input
-                id="lastName"
-                type="text"
-                placeholder="Last Name"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                style={{ paddingLeft: 14 }}
-              />
-            </div>
-            <div className="field-error">{lastNameError}</div>
-
-            <div className="input-group">
-              <span className="input-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="20" height="20">
-                  <path
-                    fill="currentColor"
-                    d="M6.6 10.8c1.4 2.7 3.9 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.2 1L6.6 10.8Z"
-                  />
-                </svg>
-              </span>
-              <input
-                type="tel"
-                placeholder="Phone number (for SMS notifications)"
-                autoComplete="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
-            </div>
-            <div className="field-error">{phoneError}</div>
-
-            <label className="privacy-check">
-              <input
-                type="checkbox"
-                checked={agreedToPrivacy}
-                onChange={(e) => setAgreedToPrivacy(e.target.checked)}
-              />
-              <span>
-                I agree to the{" "}
-                <a href="/privacy-policy" target="_blank" rel="noopener noreferrer">
-                  Data Privacy Policy
-                </a>{" "}
-                and consent to the collection and processing of my personal
-                data.
-              </span>
-            </label>
-            <div className="field-error">{privacyError}</div>
-
-            <button type="submit" disabled={loading} className="login-btn">
-              <svg viewBox="0 0 24 24" width="18" height="18">
-                <path
-                  fill="currentColor"
-                  d="M10 17v-3H3v-4h7V7l5 5-5 5Zm9 2H12v-2h7V7h-7V5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2Z"
-                />
+    <div className="reg-page" data-theme={theme}>
+      <main className="reg-container">
+        <header className="reg-header">
+          <button type="button" className="reg-back-btn" onClick={() => setLeaveModalOpen(true)}>
+            <span className="reg-back-btn__circle" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5" />
+                <path d="m12 19-7-7 7-7" />
               </svg>
-              {loading ? "Saving..." : "Finish Registration"}
-            </button>
+            </span>
+            <span>Back</span>
+          </button>
 
-            {status.text && (
-              <div className={`status ${status.type}`}>{status.text}</div>
-            )}
-            </form>
+          <div className="reg-stepper" aria-label="Final step: Complete Profile">
+            <span className="reg-stepper__bar reg-stepper__bar--done" />
+            <span className="reg-stepper__bar reg-stepper__bar--active" />
+          </div>
+
+          <ThemeToggle theme={theme} onToggle={toggleTheme} className="reg-theme-btn" iconSize={15} />
+        </header>
+
+        <div className="reg-brand-row">
+          <img src="/logo.png" alt="Perez Printing Shop logo" className="reg-brand-row__logo" />
+          <div className="reg-brand-row__meta">
+            <span className="reg-brand-row__shop">
+              <strong>PEREZ</strong> Printing Shop
+            </span>
+            <span className="reg-brand-row__step-tag">Final Step · Complete Registration</span>
           </div>
         </div>
-      </div>
+
+        <form onSubmit={handleSubmit} noValidate className="reg-form">
+          <h1 className="reg-step-title">Almost There</h1>
+          <p className="reg-step-subtitle">
+            Your Google account is verified. Add your name and phone number to finish setting up your
+            customer profile.
+          </p>
+
+          <div className="reg-verified-pill">
+            <span className="reg-verified-pill__check" aria-hidden="true">✓</span>
+            <span>Signed in with Google as <strong>{user?.email || ""}</strong></span>
+          </div>
+
+          <div className="reg-grid-2">
+            <div className="reg-field">
+              <label className="reg-label" htmlFor="firstName">
+                First Name <span className="reg-req">*</span>
+              </label>
+              <div className={`reg-input-wrap${firstNameError ? " reg-input-wrap--error" : ""}`}>
+                <span className="reg-input-icon" aria-hidden="true">
+                  <svg {...iconProps}>
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M4 21a8 8 0 0 1 16 0" />
+                  </svg>
+                </span>
+                <input
+                  id="firstName"
+                  type="text"
+                  placeholder="Given name"
+                  autoComplete="given-name"
+                  aria-invalid={Boolean(firstNameError)}
+                  value={firstName}
+                  onChange={(e) => {
+                    setFirstName(e.target.value);
+                    if (firstNameError) setFirstNameError("");
+                  }}
+                />
+              </div>
+              {firstNameError && <div className="reg-error" role="alert">{firstNameError}</div>}
+            </div>
+
+            <div className="reg-field">
+              <label className="reg-label" htmlFor="lastName">
+                Last Name <span className="reg-req">*</span>
+              </label>
+              <div className={`reg-input-wrap${lastNameError ? " reg-input-wrap--error" : ""}`}>
+                <span className="reg-input-icon" aria-hidden="true">
+                  <svg {...iconProps}>
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M4 21a8 8 0 0 1 16 0" />
+                  </svg>
+                </span>
+                <input
+                  id="lastName"
+                  type="text"
+                  placeholder="Family name"
+                  autoComplete="family-name"
+                  aria-invalid={Boolean(lastNameError)}
+                  value={lastName}
+                  onChange={(e) => {
+                    setLastName(e.target.value);
+                    if (lastNameError) setLastNameError("");
+                  }}
+                />
+              </div>
+              {lastNameError && <div className="reg-error" role="alert">{lastNameError}</div>}
+            </div>
+          </div>
+
+          <div className="reg-field">
+            <label className="reg-label" htmlFor="regPhone">
+              Phone Number <span className="reg-req">*</span>
+            </label>
+            <div className={`reg-input-wrap${phoneError ? " reg-input-wrap--error" : ""}`}>
+              <span className="reg-input-icon" aria-hidden="true">
+                <svg {...iconProps}>
+                  <rect x="6" y="2" width="12" height="20" rx="2" />
+                  <path d="M11 18h2" />
+                </svg>
+              </span>
+              <input
+                id="regPhone"
+                type="tel"
+                placeholder="09XX XXX XXXX"
+                autoComplete="tel"
+                aria-invalid={Boolean(phoneError)}
+                value={phone}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  if (phoneError) setPhoneError("");
+                }}
+              />
+            </div>
+            {phoneError ? (
+              <div className="reg-error" role="alert">{phoneError}</div>
+            ) : (
+              <div className="reg-helper">Used for SMS updates about your print orders.</div>
+            )}
+          </div>
+
+          <label className="reg-privacy-check">
+            <input
+              type="checkbox"
+              checked={agreedToPrivacy}
+              onChange={(e) => {
+                setAgreedToPrivacy(e.target.checked);
+                if (e.target.checked) setPrivacyError("");
+              }}
+            />
+            <span>
+              I agree to the{" "}
+              <a href="/privacy-policy" target="_blank" rel="noopener noreferrer">
+                Data Privacy Policy
+              </a>{" "}
+              and consent to the collection and processing of my personal data.
+            </span>
+          </label>
+          {privacyError && <div className="reg-error" role="alert">{privacyError}</div>}
+
+          {status.text && (
+            <div className={`reg-status reg-status--${status.type}`} role="status">{status.text}</div>
+          )}
+
+          <div className="reg-actions-bar">
+            <button type="button" className="reg-text-link" onClick={() => setLeaveModalOpen(true)}>
+              Need a different account? <strong>Back to sign in</strong>
+            </button>
+            <button type="submit" className="reg-btn reg-btn--primary" disabled={saving || done}>
+              {saving && <span className="reg-spinner" aria-hidden="true" />}
+              {done ? "Registration Complete ✓" : saving ? "Saving..." : "Finish Registration"}
+            </button>
+          </div>
+        </form>
+      </main>
+
+      {leaveModalOpen && (
+        <div
+          className="reg-modal-overlay"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setLeaveModalOpen(false);
+          }}
+        >
+          <div className="reg-modal" role="dialog" aria-modal="true" aria-labelledby="complete-back-modal-title">
+            <h2 id="complete-back-modal-title" className="reg-modal__title">Return to Sign In?</h2>
+            <p className="reg-modal__subtitle">
+              Your profile isn't saved yet. Are you sure you want to go back to the sign-in page?
+            </p>
+            <div className="reg-callout reg-callout--modal">
+              You can sign in again with Google anytime to finish your registration.
+            </div>
+            <div className="reg-modal__actions">
+              <button type="button" className="reg-btn reg-btn--secondary" onClick={() => setLeaveModalOpen(false)}>
+                Stay here
+              </button>
+              <button type="button" className="reg-btn reg-btn--primary" onClick={() => navigate("/")}>
+                Back to sign in
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

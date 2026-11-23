@@ -20,6 +20,7 @@ import CustomerPayments from "../components/CustomerPayments";
 import PaymentBadge from "../components/PaymentBadge";
 import { getOrderPaymentStatus } from "../utils/orderStatus";
 import "./CustomerDashboard.css";
+import ConfirmModal from "../components/ConfirmModal";
 import {
   lineOptionsSuffix,
   getServiceUnits,
@@ -35,6 +36,7 @@ export default function CustomerDashboard() {
   const [profileImageFailed, setProfileImageFailed] = useState(false);
   const [notificationModalOpen, setNotificationModalOpen] = useState(false);
   const navigate = useNavigate();
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const { logout, user, profile } = useAuth();
   const orderCounts = useSidebarOrderCounts(user?.uid, "customer");
 
@@ -123,6 +125,14 @@ export default function CustomerDashboard() {
 
   return (
     <div className="dashboard-layout">
+      <ConfirmModal
+        open={logoutConfirmOpen}
+        title="Confirm Logout"
+        message="Are you sure you want to log out of your account?"
+        confirmLabel="Log out"
+        onConfirm={handleLogout}
+        onCancel={() => setLogoutConfirmOpen(false)}
+      />
       {/* Mobile top bar */}
       <div className="mobile-topbar">
         <button
@@ -234,7 +244,7 @@ export default function CustomerDashboard() {
             </div>
           </button>
 
-          <button className="logout-btn" onClick={handleLogout}>
+          <button className="logout-btn" onClick={() => setLogoutConfirmOpen(true)}>
             <svg viewBox="0 0 24 24" width="18" height="18">
               <path
                 fill="currentColor"

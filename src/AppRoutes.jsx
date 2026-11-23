@@ -1,16 +1,20 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import AuthLoader from "./components/AuthLoader";
 import Login from "./pages/Login";
-import CreateAccount from "./pages/CreateAccount";
-import CompleteRegistration from "./pages/Completeregistration.jsx";
-import PrivacyPolicy from "./pages/PrivacyPolicy";
-import AdminDashboard from "./pages/AdminDashboard";
-import StaffDashboard from "./pages/StaffDashboard";
-import CustomerDashboard from "./pages/CustomerDashboard";
 import ProtectedRoute from "./ProtectedRoute";
+
+const CreateAccount = lazy(() => import("./pages/CreateAccount"));
+const CompleteRegistration = lazy(() => import("./pages/Completeregistration.jsx"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const StaffDashboard = lazy(() => import("./pages/StaffDashboard"));
+const CustomerDashboard = lazy(() => import("./pages/CustomerDashboard"));
 
 export default function AppRoutes() {
   return (
     <BrowserRouter>
+      <Suspense fallback={<AuthLoader message="Loading Perez Printing Shop..." />}>
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/create-account" element={<CreateAccount />} />
@@ -44,6 +48,7 @@ export default function AppRoutes() {
           }
         />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }
