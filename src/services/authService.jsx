@@ -9,6 +9,9 @@ import {
   sendPasswordResetEmail,
   signInWithPopup,
   GoogleAuthProvider,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
 } from "firebase/auth";
 import { auth } from "../firebase-config";
 
@@ -19,13 +22,21 @@ const googleProvider = new GoogleAuthProvider();
 // different one instead of silently reusing whichever is active.
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
+// "Remember me" on: the session survives closing the browser.
+// Off: the session ends when the tab/browser is closed.
+function applyPersistence(remember) {
+  return setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
+}
+
 /**
  * Logs a user in with Firebase Authentication.
  * @param {string} email
  * @param {string} password
+ * @param {boolean} [remember=true] keep the user signed in after the browser is closed
  * @returns {Promise<import("firebase/auth").UserCredential>}
  */
-export function loginUser(email, password) {
+export async function loginUser(email, password, remember = true) {
+  await applyPersistence(remember);
   return signInWithEmailAndPassword(auth, email, password);
 }
 
@@ -41,9 +52,11 @@ export function signupUser(email, password) {
 
 /**
  * Signs in (or signs up, if it's their first time) using a Google account.
+ * @param {boolean} [remember=true] keep the user signed in after the browser is closed
  * @returns {Promise<import("firebase/auth").UserCredential>}
  */
-export function signInWithGoogle() {
+export async function signInWithGoogle(remember = true) {
+  await applyPersistence(remember);
   return signInWithPopup(auth, googleProvider);
 }
 

@@ -24,6 +24,34 @@ function getRedirectPath(role) {
   return "/dashboard"; // default: customer
 }
 
+// "Remember me" keeps the email (never the password) in localStorage so the form is pre-filled
+// next time; the session itself is kept or dropped via Firebase auth persistence.
+const REMEMBER_KEY = "pps.rememberMe";
+const REMEMBERED_EMAIL_KEY = "pps.rememberedEmail";
+
+function readRememberedLogin() {
+  try {
+    const remember = localStorage.getItem(REMEMBER_KEY) === "1";
+    return { remember, email: remember ? localStorage.getItem(REMEMBERED_EMAIL_KEY) || "" : "" };
+  } catch {
+    return { remember: false, email: "" };
+  }
+}
+
+function saveRememberedLogin(remember, email) {
+  try {
+    if (remember) {
+      localStorage.setItem(REMEMBER_KEY, "1");
+      if (email) localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
+    } else {
+      localStorage.removeItem(REMEMBER_KEY);
+      localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+    }
+  } catch {
+    // Storage can be unavailable (private mode); remembering the email is optional.
+  }
+}
+
 const iconProps = {
   viewBox: "0 0 24 24",
   width: "22",
@@ -177,8 +205,9 @@ export default function Login() {
   const [signInOpen, setSignInOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => readRememberedLogin().email);
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(() => readRememberedLogin().remember);
   const [showPassword, setShowPassword] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -342,11 +371,12 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const userCredential = await loginUser(trimmedEmail, password);
+      const userCredential = await loginUser(trimmedEmail, password, rememberMe);
       const profile = await getUserProfile(userCredential.user.uid);
 
       if (await rejectIfDeactivated(profile)) return;
 
+      saveRememberedLogin(rememberMe, trimmedEmail);
       setStatus({ text: "Logged in successfully.", type: "success" });
       navigate(getRedirectPath(profile?.role));
     } catch (err) {
@@ -367,11 +397,13 @@ export default function Login() {
 
     setGoogleLoading(true);
     try {
-      const userCredential = await signInWithGoogle();
+      const userCredential = await signInWithGoogle(rememberMe);
       const profile = await getUserProfile(userCredential.user.uid);
 
       if (await rejectIfDeactivated(profile)) return;
 
+      // Only the email typed in the form is remembered, never Google account details.
+      saveRememberedLogin(rememberMe, rememberMe ? email.trim() : "");
       navigate(profile ? getRedirectPath(profile.role) : "/complete-registration");
     } catch (err) {
       console.error("Google sign-in failed:", err.code, err);
@@ -657,6 +689,15 @@ export default function Login() {
                 </button>
               </div>
               <div className="field-error">{passwordError}</div>
+
+              <label className="remember-check">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                />
+                <span>Remember me</span>
+              </label>
 
               <label className="privacy-check">
                 <input

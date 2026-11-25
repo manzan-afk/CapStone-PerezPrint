@@ -160,6 +160,16 @@ export default function CustomerPayments({
   const [paymentSettings, setPaymentSettings] = useState(null);
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [qrOpen, setQrOpen] = useState(false);
+
+  useEffect(() => {
+    if (!qrOpen) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setQrOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [qrOpen]);
   const [loadError, setLoadError] = useState("");
 
   const [orderId, setOrderId] = useState(initialOrderId);
@@ -526,11 +536,19 @@ export default function CustomerPayments({
               </div>
             </dl>
             {paymentSettings.qrUrl && (
-              <img
-                className="cpay-send__qr"
-                src={paymentSettings.qrUrl}
-                alt="GCash QR code"
-              />
+              <button
+                type="button"
+                className="cpay-send__qr-btn"
+                onClick={() => setQrOpen(true)}
+                aria-label="View GCash QR code in full size"
+                title="Click to view full size"
+              >
+                <img
+                  className="cpay-send__qr"
+                  src={paymentSettings.qrUrl}
+                  alt="GCash QR code"
+                />
+              </button>
             )}
           </div>
         ) : (
@@ -795,6 +813,31 @@ export default function CustomerPayments({
           </div>
         )}
       </section>
+
+      {qrOpen && paymentSettings?.qrUrl && (
+        <div
+          className="cpay-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="GCash QR code"
+          onClick={() => setQrOpen(false)}
+        >
+          <button
+            type="button"
+            className="cpay-lightbox__close"
+            onClick={() => setQrOpen(false)}
+            aria-label="Close"
+          >
+            ✕
+          </button>
+          <img
+            className="cpay-lightbox__img"
+            src={paymentSettings.qrUrl}
+            alt="GCash QR code"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

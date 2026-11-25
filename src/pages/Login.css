@@ -634,6 +634,23 @@ body {
   -webkit-text-decoration-color: var(--orange);
   text-decoration-color: var(--orange);
 }
+.remember-check {
+  color: var(--text-body);
+  cursor: pointer;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 8px;
+  font-size: 13px;
+  display: flex;
+  width: fit-content;
+}
+.remember-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--orange);
+  cursor: pointer;
+  flex-shrink: 0;
+}
 .input-group input:disabled {
   background: var(--surface);
   color: #6b7280;
