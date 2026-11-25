@@ -319,6 +319,10 @@ export default function CustomerDashboard() {
             email={user?.email}
             customerName={`${profile?.firstName || ""} ${profile?.lastName || ""}`.trim()}
             initialOrderId={payOrderId}
+            onPaymentSubmitted={() => {
+              setPayOrderId("");
+              setView("orders");
+            }}
           />
         )}
         {view === "profile" && <ProfileInfo user={user} profile={profile} />}
@@ -1370,6 +1374,10 @@ function OrderCartModal({ initialService, uid, email, customerName, onClose, onS
             </ul>
           )}
           <div className="field-error">{filesError}</div>
+
+          <div className="order-modal__note" role="note">
+            <strong>Note:</strong> Once an order is placed, it cannot be cancelled.
+          </div>
 
           <button type="submit" className="login-btn order-submit-btn" disabled={submitting}>
             {submitting ? uploadNote || "Submitting..." : "Submit Order"}

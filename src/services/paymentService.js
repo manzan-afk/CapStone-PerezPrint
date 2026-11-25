@@ -142,7 +142,7 @@ export async function submitPayment(data) {
     customerEmail: data.customerEmail || "",
     customerName: data.customerName || "",
     paymentMethod: "GCash",
-    paymentOption: data.paymentOption,
+    paymentOption: data.paymentOption || "",
     referenceNumber: normalizeReference(data.referenceNumber),
     amount: Number(data.amount),
     receiptUrl: data.receiptUrl,

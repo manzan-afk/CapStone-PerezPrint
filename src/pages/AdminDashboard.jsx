@@ -725,7 +725,7 @@ function SalesManagement() {
           getAllUsers(),
           getAllServices(),
         ]);
-        setOrders(allOrders);
+        setOrders(allOrders.filter((order) => order.status !== "cancelled"));
         setUsers(allUsers);
         setServices(allServices);
       } catch (err) {
@@ -906,7 +906,7 @@ function SalesManagement() {
         {orders.length > 0 && (
           <p className="report-range-summary">
             {visibleTransactions.length} transaction{visibleTransactions.length === 1 ? "" : "s"}
-            {" · "}Total ₱{visibleTotal.toFixed(2)} (excludes cancelled)
+            {" · "}Total ₱{visibleTotal.toFixed(2)}
           </p>
         )}
 

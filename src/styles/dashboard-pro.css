@@ -418,6 +418,25 @@
 }
 
 @media (max-width: 860px) {
+  /* Mobile drawer: the whole menu (nav items, profile, logout) must stay reachable. */
+  .dashboard-layout .sidebar {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    max-width: 85vw;
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+
+  .dashboard-layout .sidebar__nav {
+    flex: 1 0 auto;
+  }
+
+  .dashboard-layout .sidebar__footer {
+    flex-shrink: 0;
+    margin-top: 16px;
+  }
+
   .dashboard-layout--pro .sidebar {
     position: fixed;
     top: 0;

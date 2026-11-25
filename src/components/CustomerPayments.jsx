@@ -7,7 +7,6 @@ import {
   getPaymentSettings,
   hasSubmittedReference,
   normalizeReference,
-  PAYMENT_OPTIONS,
 } from "../services/paymentService";
 import { scanGcashReceipt } from "../services/receiptOcrService";
 import { PAYMENT_STATUS_LABELS, getOrderPaymentStatus } from "../utils/orderStatus";
@@ -148,7 +147,14 @@ function OrderPicker({ id, orders, services, value, onChange }) {
   );
 }
 
-export default function CustomerPayments({ uid, email, customerName = "", initialOrderId = "" }) {
+export default function CustomerPayments({
+  uid,
+  email,
+  customerName = "",
+  initialOrderId = "",
+  onPaymentSubmitted,
+}) {
+  const redirectTimerRef = useRef(null);
   const [orders, setOrders] = useState([]);
   const [payments, setPayments] = useState([]);
   const [paymentSettings, setPaymentSettings] = useState(null);
@@ -157,8 +163,6 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
   const [loadError, setLoadError] = useState("");
 
   const [orderId, setOrderId] = useState(initialOrderId);
-  const [paymentOption, setPaymentOption] = useState(PAYMENT_OPTIONS[0]);
-  // null until the customer edits it; then the field shows the selected order's total.
   const [amountEdit, setAmountEdit] = useState(null);
   const [referenceNumber, setReferenceNumber] = useState("");
   const [paymentDate, setPaymentDate] = useState("");
@@ -183,6 +187,7 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
   // Preview URLs are created when a file is picked and revoked when it's replaced, cleared or unmounted.
   useEffect(() => () => {
     if (proofPreviewRef.current) URL.revokeObjectURL(proofPreviewRef.current);
+    clearTimeout(redirectTimerRef.current);
   }, []);
 
   function setProof(file) {
@@ -429,7 +434,6 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
         customerId: uid,
         customerEmail: email,
         customerName,
-        paymentOption,
         amount: sentValue,
         referenceNumber: trimmedReference,
         senderName: trimmedSender,
@@ -446,10 +450,14 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
       setPaymentDate("");
       clearFile();
       setStatus({
-        text: "Payment submitted. Your order stays on hold until the shop verifies it.",
+        text: "Payment submitted. Taking you to My Orders...",
         type: "success",
       });
-      await loadData();
+      if (onPaymentSubmitted) {
+        redirectTimerRef.current = setTimeout(onPaymentSubmitted, 1500);
+      } else {
+        await loadData();
+      }
     } catch (err) {
       console.error("Failed to submit payment:", err);
       if (err.code === "duplicate-reference") {
@@ -563,27 +571,6 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
                   onChange={handleOrderChange}
                 />
                 {errors.order && <span className="cpay-error">{errors.order}</span>}
-              </div>
-
-              <div className="cpay-field">
-                <span className="cpay-label">How did you pay?</span>
-                <div className="cpay-options" role="radiogroup" aria-label="Payment option">
-                  {PAYMENT_OPTIONS.map((option) => (
-                    <label
-                      key={option}
-                      className={`cpay-option${paymentOption === option ? " cpay-option--active" : ""}`}
-                    >
-                      <input
-                        type="radio"
-                        name="paymentOption"
-                        value={option}
-                        checked={paymentOption === option}
-                        onChange={() => setPaymentOption(option)}
-                      />
-                      {option === "QR Code" ? "Scanned the QR code" : "Sent to the GCash number"}
-                    </label>
-                  ))}
-                </div>
               </div>
 
               <div className="cpay-field">
