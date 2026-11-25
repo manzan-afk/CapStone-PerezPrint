@@ -97,10 +97,39 @@ export function findDuplicateReference(payment, payments) {
 const toCents = (value) => Math.round(Number(value) * 100);
 
 /**
+ * True when the customer already has a non-rejected payment with this reference number.
+ * Reads fresh data (customers can only read their own payments); the staff review
+ * (updatePaymentStatus) additionally blocks references used by other customers.
+ */
+export async function hasSubmittedReference(customerId, referenceNumber) {
+  const key = normalizeReference(referenceNumber);
+  if (!key) return false;
+  const snapshot = await getDocs(
+    query(
+      collection(db, "payments"),
+      where("customerId", "==", customerId),
+      where("referenceNumber", "==", key)
+    )
+  );
+  return snapshot.docs.some(
+    (item) => mapPayment(item.id, item.data()).paymentStatus !== "rejected"
+  );
+}
+
+/**
  * Customer submits a payment for an order: creates the payment record and moves the
  * order's payment status to "pending" together. The order itself stays "placed".
+ * Scanned receipt values (ocrScanned / ocrDetected) are stored for the reviewer only;
+ * a payment is always created as "pending" and verified manually by staff/admin.
  */
 export async function submitPayment(data) {
+  if (await hasSubmittedReference(data.customerId, data.referenceNumber)) {
+    throw serviceError(
+      "You already submitted a payment with this reference number.",
+      "duplicate-reference"
+    );
+  }
+
   const paymentRef = doc(collection(db, "payments"));
   const batch = writeBatch(db);
 
@@ -117,6 +146,14 @@ export async function submitPayment(data) {
     referenceNumber: normalizeReference(data.referenceNumber),
     amount: Number(data.amount),
     receiptUrl: data.receiptUrl,
+    senderName: (data.senderName || "").trim(),
+    paymentDate: data.paymentDate || "",
+    ocrScanned: Boolean(data.ocrScanned),
+    ocrDetected: {
+      referenceNumber: data.ocrDetected?.referenceNumber || "",
+      paymentDate: data.ocrDetected?.paymentDate || "",
+      senderName: data.ocrDetected?.senderName || "",
+    },
     paymentStatus: "pending",
     createdAt: serverTimestamp(),
   });

@@ -1,8 +1,16 @@
 .paysettings {
+  width: 100%;
   max-width: 520px;
+  margin: 0 auto;
+}
+
+.paysettings .cpay-card__header {
+  text-align: center;
 }
 
 .paysettings__qr {
+  display: block;
+  margin: 0 auto;
   width: 180px;
   height: 180px;
   object-fit: contain;

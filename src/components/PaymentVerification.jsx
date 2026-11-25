@@ -174,6 +174,7 @@ function TransactionManagement({ reviewer }) {
       t.customer?.email,
       t.orderReference,
       t.referenceNumber,
+      t.senderName,
       String(t.amount),
     ].some((value) => value?.toLowerCase().includes(searchValue));
   });
@@ -556,8 +557,33 @@ function TransactionManagement({ reviewer }) {
                   {detailsTransaction.duplicateOf && (
                     <span className="pverify-review pverify-review--warn">Duplicate reference</span>
                   )}
+                  {detailsTransaction.ocrScanned && (
+                    <span className="pverify-review">
+                      {detailsTransaction.ocrDetected?.referenceNumber === detailsTransaction.referenceNumber
+                        ? "Read from receipt by OCR"
+                        : "Receipt was scanned; customer edited this value"}
+                    </span>
+                  )}
                 </dd>
               </div>
+              {detailsTransaction.senderName && (
+                <div>
+                  <dt>Sender's account name</dt>
+                  <dd>{detailsTransaction.senderName}</dd>
+                </div>
+              )}
+              {detailsTransaction.paymentDate && (
+                <div>
+                  <dt>Payment date (per customer)</dt>
+                  <dd>
+                    {new Date(`${detailsTransaction.paymentDate}T00:00:00`).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt>Submitted</dt>
                 <dd>{formatDate(detailsTransaction.createdAt)}</dd>

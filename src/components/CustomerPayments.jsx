@@ -5,18 +5,35 @@ import {
   submitPayment,
   getCustomerPayments,
   getPaymentSettings,
+  hasSubmittedReference,
   normalizeReference,
   PAYMENT_OPTIONS,
 } from "../services/paymentService";
+import { scanGcashReceipt } from "../services/receiptOcrService";
 import { PAYMENT_STATUS_LABELS, getOrderPaymentStatus } from "../utils/orderStatus";
 import "./CustomerPayments.css";
 
 const MAX_PROOF_BYTES = 5 * 1024 * 1024;
+const SCAN_FIELD_LABELS = {
+  referenceNumber: "reference number",
+  paymentDate: "payment date",
+  senderName: "sender name",
+};
+const EMPTY_SCAN = { state: "idle", progress: 0, message: "" };
+
+function todayIso() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function toIsoDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
 
 const PAYMENT_STEPS = [
   "Send the exact order amount through GCash (number or QR code).",
   "Copy the reference number from your GCash receipt.",
-  "Enter the amount you sent and attach a screenshot of the receipt.",
+  "Enter the amount you sent and attach a screenshot of the receipt. Tap Scan receipt to fill in the details automatically, then check them.",
   "The shop verifies your payment. Printing starts only after it is verified.",
 ];
 
@@ -144,6 +161,13 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
   // null until the customer edits it; then the field shows the selected order's total.
   const [amountEdit, setAmountEdit] = useState(null);
   const [referenceNumber, setReferenceNumber] = useState("");
+  const [paymentDate, setPaymentDate] = useState("");
+  const [senderName, setSenderName] = useState("");
+  const [scan, setScan] = useState(EMPTY_SCAN);
+  // Fields currently holding an OCR value the customer hasn't edited, and what OCR detected.
+  const [autoFilled, setAutoFilled] = useState({});
+  const ocrDetectedRef = useRef(null);
+  const scanRunRef = useRef(0);
   const [proofFile, setProofFile] = useState(null);
   const [proofPreview, setProofPreview] = useState("");
   const proofPreviewRef = useRef("");
@@ -167,6 +191,94 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
     proofPreviewRef.current = previewUrl;
     setProofPreview(previewUrl);
     setProofFile(file);
+    // A different image invalidates any scan in progress and its auto-fill markers.
+    scanRunRef.current += 1;
+    setScan(EMPTY_SCAN);
+    setAutoFilled({});
+    ocrDetectedRef.current = null;
+  }
+
+  function editField(field, setter, errorKey) {
+    return (event) => {
+      setter(event.target.value);
+      setAutoFilled((previous) => ({ ...previous, [field]: false }));
+      setErrors((previous) => ({ ...previous, [errorKey]: "" }));
+    };
+  }
+
+  async function handleScan() {
+    if (!proofFile || scan.state === "scanning") return;
+    if (!proofFile.type.startsWith("image/")) {
+      setScan({ state: "error", progress: 0, message: "Only image receipts can be scanned." });
+      return;
+    }
+
+    const run = scanRunRef.current + 1;
+    scanRunRef.current = run;
+    setScan({ state: "scanning", progress: 0, message: "" });
+    try {
+      const detected = await scanGcashReceipt(proofFile, (progress) => {
+        if (scanRunRef.current === run) {
+          setScan((previous) => ({ ...previous, progress }));
+        }
+      });
+      if (scanRunRef.current !== run) return;
+
+      const found = Object.keys(SCAN_FIELD_LABELS).filter((field) => detected[field]);
+      ocrDetectedRef.current = detected;
+      if (detected.referenceNumber) setReferenceNumber(detected.referenceNumber);
+      if (detected.paymentDate) setPaymentDate(detected.paymentDate);
+      if (detected.senderName) setSenderName(detected.senderName);
+      setAutoFilled(Object.fromEntries(found.map((field) => [field, true])));
+      setErrors((previous) => ({
+        ...previous,
+        ...(detected.referenceNumber ? { reference: "" } : {}),
+        ...(detected.paymentDate ? { paymentDate: "" } : {}),
+        ...(detected.senderName ? { senderName: "" } : {}),
+      }));
+
+      if (found.length === 0) {
+        setScan({
+          state: "error",
+          progress: 100,
+          message:
+            "We couldn't read any details from this receipt. Try a clearer screenshot or enter them manually.",
+        });
+        return;
+      }
+
+      // A duplicate is flagged right away instead of waiting for the submit.
+      let duplicate = false;
+      if (detected.referenceNumber) {
+        duplicate = await hasSubmittedReference(uid, detected.referenceNumber).catch(() => false);
+        if (scanRunRef.current !== run) return;
+        if (duplicate) {
+          setErrors((previous) => ({
+            ...previous,
+            reference: "You already submitted a payment with this reference number.",
+          }));
+        }
+      }
+
+      const missing = Object.keys(SCAN_FIELD_LABELS)
+        .filter((field) => !detected[field])
+        .map((field) => SCAN_FIELD_LABELS[field]);
+      setScan({
+        state: "success",
+        progress: 100,
+        message: missing.length
+          ? `Scan complete. Please check the filled details and enter the ${missing.join(" and ")} manually.`
+          : "Scan complete. Please check that the details below match your receipt.",
+      });
+    } catch (err) {
+      if (scanRunRef.current !== run) return;
+      console.error("Receipt scan failed:", err);
+      setScan({
+        state: "error",
+        progress: 0,
+        message: "We couldn't scan this receipt. Check your connection or enter the details manually.",
+      });
+    }
   }
 
   async function loadData() {
@@ -276,6 +388,26 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
       nextErrors.reference = "You already submitted a payment with this reference number.";
     }
 
+    const trimmedSender = senderName.trim();
+    if (!trimmedSender) {
+      nextErrors.senderName = "Enter the sender's account name shown on the receipt.";
+    } else if (!/^[A-Za-z.,'*\- ]{2,80}$/.test(trimmedSender) || !/[A-Za-z]{2}/.test(trimmedSender)) {
+      nextErrors.senderName = "Enter a valid account name (letters only, up to 80 characters).";
+    }
+
+    if (!paymentDate) {
+      nextErrors.paymentDate = "Enter the payment date shown on the receipt.";
+    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) || Number.isNaN(Date.parse(paymentDate))) {
+      nextErrors.paymentDate = "Enter a valid payment date.";
+    } else if (paymentDate > todayIso()) {
+      nextErrors.paymentDate = "The payment date can't be in the future.";
+    } else {
+      const orderDate = selectedOrder?.createdAt?.toDate?.();
+      if (orderDate && paymentDate < toIsoDate(orderDate)) {
+        nextErrors.paymentDate = "The payment date can't be before the order was placed.";
+      }
+    }
+
     if (!proofFile) {
       nextErrors.proof = "Upload a screenshot of your GCash receipt.";
     } else if (!proofFile.type.startsWith("image/")) {
@@ -300,12 +432,18 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
         paymentOption,
         amount: sentValue,
         referenceNumber: trimmedReference,
+        senderName: trimmedSender,
+        paymentDate,
+        ocrScanned: Boolean(ocrDetectedRef.current),
+        ocrDetected: ocrDetectedRef.current,
         receiptUrl: proof.url,
       });
 
       setOrderId("");
       setAmountEdit(null);
       setReferenceNumber("");
+      setSenderName("");
+      setPaymentDate("");
       clearFile();
       setStatus({
         text: "Payment submitted. Your order stays on hold until the shop verifies it.",
@@ -314,10 +452,15 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
       await loadData();
     } catch (err) {
       console.error("Failed to submit payment:", err);
+      if (err.code === "duplicate-reference") {
+        setErrors((previous) => ({ ...previous, reference: err.message }));
+      }
       setStatus({
         text:
           err.code === "permission-denied"
             ? "You don't have permission to submit payments yet. Please contact the shop."
+            : err.code === "duplicate-reference"
+            ? err.message
             : "Failed to submit your payment. Please try again.",
         type: "error",
       });
@@ -325,6 +468,7 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
       setSubmitting(false);
     }
   }
+
 
   if (loading) {
     return <div className="dashboard-content">Loading payments...</div>;
@@ -478,12 +622,46 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
                   autoComplete="off"
                   placeholder="e.g. 1234567890123"
                   value={referenceNumber}
-                  onChange={(event) => {
-                    setReferenceNumber(event.target.value);
-                    setErrors((previous) => ({ ...previous, reference: "" }));
-                  }}
+                  onChange={editField("referenceNumber", setReferenceNumber, "reference")}
                 />
+                {autoFilled.referenceNumber && (
+                  <span className="cpay-hint">Filled from your receipt scan. Please check it.</span>
+                )}
                 {errors.reference && <span className="cpay-error">{errors.reference}</span>}
+              </div>
+
+              <div className="cpay-field">
+                <label className="cpay-label" htmlFor="payDate">Payment date</label>
+                <input
+                  id="payDate"
+                  className="cpay-input"
+                  type="date"
+                  max={todayIso()}
+                  value={paymentDate}
+                  onChange={editField("paymentDate", setPaymentDate, "paymentDate")}
+                />
+                {autoFilled.paymentDate && (
+                  <span className="cpay-hint">Filled from your receipt scan. Please check it.</span>
+                )}
+                {errors.paymentDate && <span className="cpay-error">{errors.paymentDate}</span>}
+              </div>
+
+              <div className="cpay-field">
+                <label className="cpay-label" htmlFor="paySender">Sender's account name</label>
+                <input
+                  id="paySender"
+                  className="cpay-input"
+                  type="text"
+                  autoComplete="off"
+                  placeholder="Name on the GCash account you paid from"
+                  maxLength={80}
+                  value={senderName}
+                  onChange={editField("senderName", setSenderName, "senderName")}
+                />
+                {autoFilled.senderName && (
+                  <span className="cpay-hint">Filled from your receipt scan. Please check it.</span>
+                )}
+                {errors.senderName && <span className="cpay-error">{errors.senderName}</span>}
               </div>
 
               <div className="cpay-field">
@@ -495,7 +673,19 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
                       <strong>{proofFile.name}</strong>
                       <span>{(proofFile.size / 1024).toFixed(0)} KB</span>
                     </div>
-                    <button type="button" className="cpay-link-btn" onClick={clearFile}>
+                    <button
+                      type="button"
+                      className="cpay-scan-btn"
+                      onClick={handleScan}
+                      disabled={scan.state === "scanning" || submitting}
+                    >
+                      {scan.state === "scanning"
+                        ? `Scanning${scan.progress ? ` ${scan.progress}%` : "..."}`
+                        : scan.state === "idle"
+                        ? "Scan receipt"
+                        : "Scan again"}
+                    </button>
+                    <button type="button" className="cpay-link-btn" onClick={clearFile} disabled={scan.state === "scanning"}>
                       Remove
                     </button>
                   </div>
@@ -519,6 +709,17 @@ export default function CustomerPayments({ uid, email, customerName = "", initia
                   accept="image/*"
                   onChange={handleFileChange}
                 />
+                {scan.state === "scanning" && (
+                  <span className="cpay-scan cpay-scan--loading" role="status">
+                    Reading your receipt… this can take a few seconds.
+                  </span>
+                )}
+                {scan.state === "success" && (
+                  <span className="cpay-scan cpay-scan--success" role="status">{scan.message}</span>
+                )}
+                {scan.state === "error" && (
+                  <span className="cpay-scan cpay-scan--error" role="alert">{scan.message}</span>
+                )}
                 {errors.proof && <span className="cpay-error">{errors.proof}</span>}
               </div>
 
